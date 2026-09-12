@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.alpha-shell"
+          path="/org/gnome/shell/extensions/alpha-shell/">
+    <key name="toggle-overlay" type="as">
+      <default><![CDATA[['<Super>space']]></default>
+      <summary>Toggle the ALPHA Shell AI overlay</summary>
+      <description>Keyboard shortcut that shows or hides the overlay.</description>
+    </key>
+    <key name="provider" type="s">
+      <default>''</default>
+      <summary>Active AI provider id</summary>
+      <description>Identifier of the AI provider to use (empty until a provider is wired).</description>
+    </key>
+    <key name="model" type="s">
+      <default>''</default>
+      <summary>Active AI model id</summary>
+      <description>Identifier of the AI model to use (empty until a provider is wired).</description>
+    </key>
+  </schema>
+</schemalist>

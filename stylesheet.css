@@ -1,0 +1,28 @@
+/* ALPHA Shell extension stylesheet.
+ *
+ * GNOME Shell 45+ auto-loads a stylesheet named `stylesheet.css` from the
+ * extension directory root, so this file is picked up (and unloaded) for us.
+ */
+
+.alpha-overlay {
+    background-color: rgba(16, 16, 24, 0.55);
+}
+
+.alpha-overlay-card {
+    background-color: #1e1e28;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+    padding: 32px 48px;
+}
+
+.alpha-overlay-title {
+    color: #ffffff;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.alpha-overlay-subtitle {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 15px;
+    margin-top: 8px;
+}

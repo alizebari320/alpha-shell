@@ -1,0 +1,10 @@
+{
+  "uuid": "alpha-shell@donk",
+  "name": "ALPHA Shell",
+  "description": "GNOME Shell extension with an AI overlay architecture (providers not wired yet)",
+  "version": "1.0",
+  "shell-version": ["50"],
+  "settings-schema": "org.gnome.shell.extensions.alpha-shell",
+  "url": "https://github.com/anomalyco/opencode",
+  "gettext-domain": "alpha-shell"
+}
