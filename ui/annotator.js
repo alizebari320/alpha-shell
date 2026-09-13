@@ -100,15 +100,25 @@ export class Annotator {
             return;
 
         this._active = true;
-        this._monitor = Main.layoutManager.primaryMonitor;
 
-        this._buildCanvases();
-        this._buildToolbar();
+        try {
+            this._monitor = Main.layoutManager.primaryMonitor;
+            this._buildCanvases();
+            this._buildToolbar();
 
-        this._track(Main.layoutManager, 'monitors-changed',
-            () => this._relayout());
+            this._track(Main.layoutManager, 'monitors-changed',
+                () => this._relayout());
 
-        this._setDrawMode(true);
+            this._setDrawMode(true);
+        } catch (e) {
+            // A half-built annotator must never be left behind: either the
+            // full tool is on screen or nothing is.
+            console.error(`[alpha-shell] annotator failed to enable: ${e.message}\n${e.stack}`);
+            this._active = false;
+            this._teardown();
+            return;
+        }
+
         console.log('[alpha-shell] annotator enabled');
     }
 
@@ -145,8 +155,11 @@ export class Annotator {
         // Bottom layer: finished strokes. (Never an event surface.)
         // GNOME 50 removed Clutter.Canvas, so the drawing surface is an
         // St.DrawingArea that doubles as the actor itself.
+        // NOTE: St.DrawingArea's 'repaint' signal passes ONLY the area —
+        // the Cairo context is fetched via get_context() inside the handler
+        // (unlike the removed Clutter.Canvas 'draw' signal, which passed cr).
         this._committedCanvas = this._makeCanvas(
-            (a, cr) => this._onCommittedDraw(a, cr));
+            a => this._onCommittedDraw(a));
         this._committedActor = this._committedCanvas;
         this._committedActor.name = 'alphaAnnotatorCommitted';
         this._committedActor.reactive = false;
@@ -154,7 +167,7 @@ export class Annotator {
 
         // Top layer: live stroke + event surface.
         this._liveCanvas = this._makeCanvas(
-            (a, cr) => this._onLiveDraw(a, cr));
+            a => this._onLiveDraw(a));
         this._liveActor = this._liveCanvas;
         this._liveActor.name = 'alphaAnnotatorLive';
         this._liveActor.reactive = true;
@@ -450,16 +463,26 @@ export class Annotator {
     // Cairo rendering
     // ------------------------------------------------------------------
 
-    _onCommittedDraw(canvas, cr) {
-        this._clearContext(cr);
-        for (const stroke of this._strokes)
-            this._paintStroke(cr, stroke);
+    _onCommittedDraw(area) {
+        const cr = area.get_context();
+        try {
+            this._clearContext(cr);
+            for (const stroke of this._strokes)
+                this._paintStroke(cr, stroke);
+        } finally {
+            cr.$dispose();
+        }
     }
 
-    _onLiveDraw(canvas, cr) {
-        this._clearContext(cr);
-        if (this._activeStroke)
-            this._paintStroke(cr, this._activeStroke);
+    _onLiveDraw(area) {
+        const cr = area.get_context();
+        try {
+            this._clearContext(cr);
+            if (this._activeStroke)
+                this._paintStroke(cr, this._activeStroke);
+        } finally {
+            cr.$dispose();
+        }
     }
 
     _clearContext(cr) {
