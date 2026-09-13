@@ -4,6 +4,10 @@
  * extension directory root, so this file is picked up (and unloaded) for us.
  */
 
+.alpha-indicator {
+    padding: 0 6px;
+}
+
 .alpha-overlay {
     background-color: rgba(16, 16, 24, 0.55);
 }

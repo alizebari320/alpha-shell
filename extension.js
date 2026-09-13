@@ -7,12 +7,16 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {AIService} from './ai/ai.js';
 import {AIOverlay} from './ui/overlay.js';
+import {Indicator} from './ui/indicator.js';
 
 export default class AlphaShellExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
         this.ai = new AIService(this._settings);
         this.overlay = new AIOverlay();
+
+        this._indicator = new Indicator(this._toggleOverlay.bind(this));
+        Main.panel.addToStatusArea('alpha-shell', this._indicator);
 
         Main.wm.addKeybinding(
             'toggle-overlay',
@@ -27,6 +31,11 @@ export default class AlphaShellExtension extends Extension {
 
     disable() {
         Main.wm.removeKeybinding('toggle-overlay');
+
+        if (this._indicator) {
+            this._indicator.destroy();
+            this._indicator = null;
+        }
 
         if (this.overlay) {
             this.overlay.destroy();
