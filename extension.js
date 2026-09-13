@@ -7,6 +7,7 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {AIService} from './ai/ai.js';
 import {AIOverlay} from './ui/overlay.js';
+import {Annotator} from './ui/annotator.js';
 import {Indicator} from './ui/indicator.js';
 
 export default class AlphaShellExtension extends Extension {
@@ -14,6 +15,7 @@ export default class AlphaShellExtension extends Extension {
         this._settings = this.getSettings();
         this.ai = new AIService(this._settings);
         this.overlay = new AIOverlay();
+        this.annotator = new Annotator();
 
         this._indicator = new Indicator(this._toggleOverlay.bind(this));
         Main.panel.addToStatusArea('alpha-shell', this._indicator);
@@ -26,11 +28,20 @@ export default class AlphaShellExtension extends Extension {
             this._toggleOverlay.bind(this)
         );
 
+        Main.wm.addKeybinding(
+            'toggle-annotator',
+            this._settings,
+            Meta.KeyBindingFlags.NONE,
+            Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW,
+            this._toggleAnnotator.bind(this)
+        );
+
         console.log('[alpha-shell] enabled');
     }
 
     disable() {
         Main.wm.removeKeybinding('toggle-overlay');
+        Main.wm.removeKeybinding('toggle-annotator');
 
         if (this._indicator) {
             this._indicator.destroy();
@@ -42,6 +53,11 @@ export default class AlphaShellExtension extends Extension {
             this.overlay = null;
         }
 
+        if (this.annotator) {
+            this.annotator.destroy();
+            this.annotator = null;
+        }
+
         this.ai = null;
         this._settings = null;
 
@@ -51,5 +67,10 @@ export default class AlphaShellExtension extends Extension {
     _toggleOverlay() {
         if (this.overlay)
             this.overlay.toggle();
+    }
+
+    _toggleAnnotator() {
+        if (this.annotator)
+            this.annotator.toggle();
     }
 }

@@ -7,6 +7,11 @@
       <summary>Toggle the ALPHA Shell AI overlay</summary>
       <description>Keyboard shortcut that shows or hides the overlay.</description>
     </key>
+    <key name="toggle-annotator" type="as">
+      <default>["&lt;Control&gt;&lt;Alt&gt;d"]</default>
+      <summary>Toggle the Screen Annotator</summary>
+      <description>Keyboard shortcut that starts or quits the screen annotator tool.</description>
+    </key>
     <key name="provider" type="s">
       <default>''</default>
       <summary>Active AI provider id</summary>

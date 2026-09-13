@@ -30,3 +30,106 @@
     font-size: 15px;
     margin-top: 8px;
 }
+
+/* ---- Screen Annotator / Handwriting (ui/annotator.js) ---- */
+
+.alpha-annotator-toolbar {
+    background-color: rgba(18, 18, 26, 0.94);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 14px;
+    padding: 10px 12px 12px 12px;
+    spacing: 10px;
+    color: #ffffff;
+    font-size: 13px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+}
+
+.alpha-annotator-drag {
+    spacing: 8px;
+    padding: 2px 4px 8px 4px;
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: bold;
+}
+
+.alpha-annotator-drag:hover {
+    color: #ffffff;
+}
+
+.alpha-annotator-section {
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 11px;
+    font-weight: bold;
+    padding-left: 2px;
+}
+
+.alpha-annotator-row {
+    spacing: 8px;
+}
+
+.alpha-annotator-btn {
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    padding: 6px 10px;
+    color: #ffffff;
+    font-weight: bold;
+    min-height: 18px;
+}
+
+.alpha-annotator-btn:hover {
+    background-color: rgba(255, 255, 255, 0.18);
+}
+
+/* Mode toggle states */
+.alpha-annotator-mode.alpha-mode-draw {
+    background-color: rgba(43, 255, 136, 0.16);
+    border-color: rgba(43, 255, 136, 0.55);
+    color: #2bff88;
+}
+
+.alpha-annotator-mode.alpha-mode-pass {
+    background-color: rgba(255, 196, 84, 0.14);
+    border-color: rgba(255, 196, 84, 0.5);
+    color: #ffc454;
+}
+
+/* Color chips — background-color comes from inline style, the frame from here */
+.alpha-annotator-chip {
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    min-height: 24px;
+    padding: 0;
+    border: 2px solid rgba(255, 255, 255, 0.22);
+    border-radius: 14px;
+}
+
+.alpha-annotator-chip.selected {
+    border-color: #ffffff;
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.55);
+}
+
+/* Stroke width buttons */
+.alpha-annotator-width-btn {
+    width: 34px;
+    min-width: 34px;
+    padding: 6px 0;
+    text-align: center;
+}
+
+.alpha-annotator-width-btn.selected {
+    background-color: rgba(43, 255, 136, 0.22);
+    border-color: rgba(43, 255, 136, 0.6);
+    color: #2bff88;
+}
+
+/* Clear / Close buttons */
+.alpha-annotator-clear:hover {
+    background-color: rgba(255, 71, 87, 0.25);
+    border-color: rgba(255, 71, 87, 0.6);
+}
+
+.alpha-annotator-close:hover {
+    background-color: rgba(255, 71, 87, 0.4);
+    border-color: rgba(255, 71, 87, 0.8);
+}
