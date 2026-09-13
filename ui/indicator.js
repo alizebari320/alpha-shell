@@ -1,23 +1,25 @@
-// Indicator — a clickable top-bar button that toggles the AI overlay.
+// Indicator — a clickable top-bar button for the ALPHA Shell tools.
 //
-// This is the standard GNOME Shell panel-button pattern: we extend
-// PanelMenu.Button so the button sits in the top bar next to the clock and
-// system indicators, and forward clicks to the overlay's toggle().
+// Left click toggles the AI overlay (unchanged behavior). Right click opens
+// a popup menu with every tool, so features like the Screen Annotator can
+// be launched with the mouse even if their keybinding is missing or taken.
 
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
 
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
+import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 const ICON_NAME = 'applications-science-symbolic';
 
 export class Indicator extends PanelMenu.Button {
-    constructor(onToggle) {
+    constructor({onToggleOverlay, onToggleAnnotator} = {}) {
         super(0.0, 'ALPHA Shell', false);
 
         this.add_style_class_name('alpha-indicator');
 
-        this._onToggle = onToggle;
+        this._onToggleOverlay = onToggleOverlay;
+        this._onToggleAnnotator = onToggleAnnotator;
 
         // The visible icon in the top bar.
         this._icon = new St.Icon({
@@ -27,13 +29,43 @@ export class Indicator extends PanelMenu.Button {
 
         this.add_child(this._icon);
 
-        // Clicking anywhere on the button toggles the overlay.
+        this._buildMenu();
+
+        // Left click: toggle the AI overlay. Right click: open the tool
+        // menu. Other buttons propagate to GNOME Shell as usual.
         this.reactive = true;
-        this.connect('button-press-event', () => {
-            if (this._onToggle)
-                this._onToggle();
-            return Clutter.EVENT_STOP;
+        this.connect('button-press-event', (actor, event) => {
+            const button = event.get_button();
+            if (button === 1) {
+                this._invoke(this._onToggleOverlay);
+                return Clutter.EVENT_STOP;
+            }
+            if (button === 3 && this.menu) {
+                this.menu.toggle();
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
         });
+    }
+
+    _buildMenu() {
+        if (!this.menu)
+            return;
+
+        const overlayItem = new PopupMenu.PopupMenuItem('AI Overlay');
+        overlayItem.connect('activate', () =>
+            this._invoke(this._onToggleOverlay));
+        this.menu.addMenuItem(overlayItem);
+
+        const annotatorItem = new PopupMenu.PopupMenuItem('Screen Annotator');
+        annotatorItem.connect('activate', () =>
+            this._invoke(this._onToggleAnnotator));
+        this.menu.addMenuItem(annotatorItem);
+    }
+
+    _invoke(fn) {
+        if (fn)
+            fn();
     }
 
     destroy() {

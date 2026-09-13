@@ -17,31 +17,43 @@ export default class AlphaShellExtension extends Extension {
         this.overlay = new AIOverlay();
         this.annotator = new Annotator();
 
-        this._indicator = new Indicator(this._toggleOverlay.bind(this));
+        this._indicator = new Indicator({
+            onToggleOverlay: this._toggleOverlay.bind(this),
+            onToggleAnnotator: this._toggleAnnotator.bind(this),
+        });
         Main.panel.addToStatusArea('alpha-shell', this._indicator);
 
-        Main.wm.addKeybinding(
-            'toggle-overlay',
-            this._settings,
-            Meta.KeyBindingFlags.NONE,
-            Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW,
-            this._toggleOverlay.bind(this)
-        );
-
-        Main.wm.addKeybinding(
-            'toggle-annotator',
-            this._settings,
-            Meta.KeyBindingFlags.NONE,
-            Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW,
-            this._toggleAnnotator.bind(this)
-        );
+        this._addKeybinding('toggle-overlay', this._toggleOverlay.bind(this));
+        this._addKeybinding('toggle-annotator', this._toggleAnnotator.bind(this));
 
         console.log('[alpha-shell] enabled');
     }
 
+    /** Register a shortcut without ever crashing enable() — a missing or
+     *  stale schema key must not take the whole extension down. */
+    _addKeybinding(name, handler) {
+        try {
+            Main.wm.addKeybinding(
+                name,
+                this._settings,
+                Meta.KeyBindingFlags.NONE,
+                Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW,
+                handler
+            );
+        } catch (e) {
+            console.warn(`[alpha-shell] keybinding '${name}' not registered: ${e.message}. ` +
+                'Use the panel icon menu or reinstall schemas, then re-login.');
+        }
+    }
+
     disable() {
-        Main.wm.removeKeybinding('toggle-overlay');
-        Main.wm.removeKeybinding('toggle-annotator');
+        for (const name of ['toggle-overlay', 'toggle-annotator']) {
+            try {
+                Main.wm.removeKeybinding(name);
+            } catch (e) {
+                // Was never registered — fine.
+            }
+        }
 
         if (this._indicator) {
             this._indicator.destroy();

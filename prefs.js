@@ -94,7 +94,7 @@ class GeneralPage extends Adw.PreferencesPage {
         });
         this._settings = settings;
 
-        const group = new Adw.PreferencesGroup({title: _('Overlay Shortcut')});
+        const group = new Adw.PreferencesGroup({title: _('Shortcuts')});
         this.add(group);
 
         group.add(new ShortcutSetting(
@@ -102,6 +102,13 @@ class GeneralPage extends Adw.PreferencesPage {
             _('Keyboard shortcut that shows or hides the AI overlay.'),
             settings,
             'toggle-overlay'
+        ));
+
+        group.add(new ShortcutSetting(
+            _('Toggle Screen Annotator'),
+            _('Keyboard shortcut that starts or quits the screen annotator tool.'),
+            settings,
+            'toggle-annotator'
         ));
     }
 }
