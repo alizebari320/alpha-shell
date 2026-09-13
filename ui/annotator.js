@@ -6,7 +6,7 @@
 //
 // Architecture (performance & Wayland notes):
 //
-//  * Two stacked transparent Clutter.Canvas actors are placed on
+//  * Two stacked transparent St.DrawingArea canvases are placed on
 //    Main.layoutManager.uiGroup, above all desktop windows:
 //      - "committed" canvas: holds all finished strokes. It is invalidated
 //        exactly once per stroke completion, never during motion.
@@ -142,33 +142,23 @@ export class Annotator {
     _buildCanvases() {
         const m = this._monitor;
 
-        // Bottom layer: finished strokes.
+        // Bottom layer: finished strokes. (Never an event surface.)
+        // GNOME 50 removed Clutter.Canvas, so the drawing surface is an
+        // St.DrawingArea that doubles as the actor itself.
         this._committedCanvas = this._makeCanvas(
-            (c, cr) => this._onCommittedDraw(c, cr));
-
-        this._committedActor = new Clutter.Actor({
-            name: 'alphaAnnotatorCommitted',
-            x: m.x,
-            y: m.y,
-            width: m.width,
-            height: m.height,
-            reactive: false, // never an event surface
-        });
-        this._committedActor.set_content(this._committedCanvas);
+            (a, cr) => this._onCommittedDraw(a, cr));
+        this._committedActor = this._committedCanvas;
+        this._committedActor.name = 'alphaAnnotatorCommitted';
+        this._committedActor.reactive = false;
+        this._committedActor.set_position(m.x, m.y);
 
         // Top layer: live stroke + event surface.
         this._liveCanvas = this._makeCanvas(
-            (c, cr) => this._onLiveDraw(c, cr));
-
-        this._liveActor = new Clutter.Actor({
-            name: 'alphaAnnotatorLive',
-            x: m.x,
-            y: m.y,
-            width: m.width,
-            height: m.height,
-            reactive: true,
-        });
-        this._liveActor.set_content(this._liveCanvas);
+            (a, cr) => this._onLiveDraw(a, cr));
+        this._liveActor = this._liveCanvas;
+        this._liveActor.name = 'alphaAnnotatorLive';
+        this._liveActor.reactive = true;
+        this._liveActor.set_position(m.x, m.y);
 
         // Pointer events for freehand drawing. The stage grab started in
         // _onPress routes motion/release here even outside actor bounds.
@@ -186,22 +176,18 @@ export class Annotator {
         // and picks above them (uiGroup children are stacked in add order).
     }
 
+    /** Build one transparent drawing surface covering the monitor.
+     *  St.DrawingArea is the GNOME 50 replacement for the removed
+     *  Clutter.Canvas. It pre-scales its Cairo context for HiDPI itself,
+     *  so we keep working in logical (stage) coordinates everywhere. */
     _makeCanvas(onDraw) {
         const m = this._monitor;
-        const canvas = new Clutter.Canvas();
-        this._track(canvas, 'draw', onDraw);
-
-        // HiDPI: the draw context arrives pre-scaled, we keep working in
-        // logical (stage) coordinates everywhere.
-        try {
-            const scale = global.display.get_monitor_scale(m.index) || 1;
-            canvas.set_scale_factor(scale);
-        } catch (e) {
-            // Non-fatal — worst case is soft strokes on scaled monitors.
-        }
-
-        canvas.set_size(m.width, m.height);
-        return canvas;
+        const area = new St.DrawingArea({
+            width: m.width,
+            height: m.height,
+        });
+        this._track(area, 'repaint', onDraw);
+        return area;
     }
 
     _buildToolbar() {
@@ -342,9 +328,9 @@ export class Annotator {
         this._strokes = [];
         this._activeStroke = null;
         if (this._committedCanvas)
-            this._committedCanvas.invalidate();
+            this._committedCanvas.queue_repaint();
         if (this._liveCanvas)
-            this._liveCanvas.invalidate();
+            this._liveCanvas.queue_repaint();
     }
 
     // ------------------------------------------------------------------
@@ -365,7 +351,7 @@ export class Annotator {
         // Capture the pointer for the whole stroke (Wayland-safe).
         this._drawGrab = this._beginGrab(this._liveActor);
 
-        this._liveCanvas.invalidate();
+        this._liveCanvas.queue_repaint();
         return Clutter.EVENT_STOP;
     }
 
@@ -384,7 +370,7 @@ export class Annotator {
             return Clutter.EVENT_STOP;
 
         pts.push(p);
-        this._liveCanvas.invalidate();
+        this._liveCanvas.queue_repaint();
         return Clutter.EVENT_STOP;
     }
 
@@ -400,8 +386,8 @@ export class Annotator {
         this._strokes.push(this._activeStroke);
         this._activeStroke = null;
 
-        this._committedCanvas.invalidate();
-        this._liveCanvas.invalidate();
+        this._committedCanvas.queue_repaint();
+        this._liveCanvas.queue_repaint();
         return Clutter.EVENT_STOP;
     }
 
