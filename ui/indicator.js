@@ -1,20 +1,27 @@
-// Indicator — a clickable top-bar button for the ALPHA Shell tools.
+// Indicator — a top-bar button that opens the ALPHA Shell tool menu.
 //
-// Left click toggles the AI overlay (unchanged behavior). Right click opens
-// a popup menu with every tool, so features like the Screen Annotator can
-// be launched with the mouse even if their keybinding is missing or taken.
+// Subclasses PanelMenu.Button, the standard GNOME Shell panel-button pattern.
+// Left click opens the popup menu (native behavior); the menu lists each
+// tool so the AI overlay and the Screen Annotator can both be launched from
+// the panel without relying on keybindings.
 
-import St from 'gi://St';
 import Clutter from 'gi://Clutter';
+import GObject from 'gi://GObject';
+import St from 'gi://St';
 
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 const ICON_NAME = 'applications-science-symbolic';
 
-export class Indicator extends PanelMenu.Button {
-    constructor({onToggleOverlay, onToggleAnnotator} = {}) {
-        super(0.0, 'ALPHA Shell', false);
+// ESM subclass of a GObject must be registered via GObject.registerClass,
+// otherwise constructing it throws "Tried to construct an object without a
+// GType" and takes the whole extension down.
+export const Indicator = GObject.registerClass({
+    GTypeName: 'AlphaShellIndicator',
+}, class Indicator extends PanelMenu.Button {
+    _init({onToggleOverlay, onToggleAnnotator} = {}) {
+        super._init(0.0, 'ALPHA Shell', false);
 
         this.add_style_class_name('alpha-indicator');
 
@@ -26,49 +33,22 @@ export class Indicator extends PanelMenu.Button {
             icon_name: ICON_NAME,
             style_class: 'system-status-icon',
         });
-
         this.add_child(this._icon);
 
-        this._buildMenu();
+        if (this.menu) {
+            this.menu.addMenuItem(this._menuItem(
+                'AI Overlay', this._onToggleOverlay));
+            this.menu.addMenuItem(this._menuItem(
+                'Screen Annotator', this._onToggleAnnotator));
+        }
+    }
 
-        // Left click: toggle the AI overlay. Right click: open the tool
-        // menu. Other buttons propagate to GNOME Shell as usual.
-        this.reactive = true;
-        this.connect('button-press-event', (actor, event) => {
-            const button = event.get_button();
-            if (button === 1) {
-                this._invoke(this._onToggleOverlay);
-                return Clutter.EVENT_STOP;
-            }
-            if (button === 3 && this.menu) {
-                this.menu.toggle();
-                return Clutter.EVENT_STOP;
-            }
-            return Clutter.EVENT_PROPAGATE;
+    _menuItem(label, fn) {
+        const item = new PopupMenu.PopupMenuItem(label);
+        item.connect('activate', () => {
+            if (fn)
+                fn();
         });
+        return item;
     }
-
-    _buildMenu() {
-        if (!this.menu)
-            return;
-
-        const overlayItem = new PopupMenu.PopupMenuItem('AI Overlay');
-        overlayItem.connect('activate', () =>
-            this._invoke(this._onToggleOverlay));
-        this.menu.addMenuItem(overlayItem);
-
-        const annotatorItem = new PopupMenu.PopupMenuItem('Screen Annotator');
-        annotatorItem.connect('activate', () =>
-            this._invoke(this._onToggleAnnotator));
-        this.menu.addMenuItem(annotatorItem);
-    }
-
-    _invoke(fn) {
-        if (fn)
-            fn();
-    }
-
-    destroy() {
-        super.destroy();
-    }
-}
+});
