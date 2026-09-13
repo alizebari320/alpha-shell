@@ -10,18 +10,33 @@ Toggle it with `Ctrl+Alt+D` (configurable in Preferences) or from the
 ALPHA Shell panel icon. A floating toolbar appears; draw directly on the
 screen with your mouse or tablet.
 
-- **Draw mode** — the canvas captures the pointer and draws freehand
-  strokes with quadratic-bézier midpoint smoothing (constant frame cost:
-  the live layer replays only the active stroke, never the session
-  history).
-- **Pass-through mode** — strokes stay 100% visible while every click,
-  gesture and window interaction falls through to the desktop apps below.
-- 4 preset ink colors (Neon Green, Cyan, Red, White) and stroke widths
-  (2/4/8/16 px).
+**Tools** (select from the toolbar or press `1`–`8` in Draw mode):
+
+- **Pen** — freehand strokes with quadratic-bézier midpoint smoothing
+- **Highlighter** — wide, translucent, square-cap ink for emphasis
+- **Eraser** — stroke-level erase: whole strokes vanish under the pointer
+- **Line / Arrow / Rectangle / Ellipse** — crisp drag-from-to shapes
+- **Text** — click, type into the inline entry, `Enter` places the label
+  (size follows the Width presets)
+
+**Other features:**
+
+- **Undo / Redo** — snapshot history (`Ctrl+Z` / `Ctrl+Shift+Z` / `Ctrl+Y`
+  or toolbar buttons). Every action is undoable: strokes, shapes, text,
+  eraser drags (one drag = one undo step) and Clear.
+- **Draw vs Pass-through mode** — in pass-through, strokes stay 100%
+  visible while every click, gesture and window interaction falls through
+  to the desktop apps below.
+- 4 preset ink colors (Neon Green, Cyan, Red, White) and width presets
+  (2/4/8/16 px, also mapped to text sizes).
+- `Escape` cancels a pending text entry or quits the tool.
 - Draggable floating toolbar that stays interactive in pass-through mode.
-- Clear (🗑) wipes the canvas; Close (✕) quits the tool.
 - Wayland-safe pointer capture via `global.stage.grab()` (Clutter.Grab);
   all signal handlers are tracked and disconnected on teardown.
+
+Keyboard shortcuts are only active in Draw mode, where the canvas holds
+the shell key focus — in pass-through mode all keys (and clicks) go to
+your apps.
 
 ## Architecture
 

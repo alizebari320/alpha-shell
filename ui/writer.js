@@ -4,6 +4,18 @@
 // the only lifecycle surface the extension needs, and the writer never
 // touches other tools or their state.
 //
+// Tools:
+//   pen          freehand strokes, quadratic-bézier midpoint smoothing
+//   highlighter  wide, translucent, square-cap ink for emphasis
+//   eraser       stroke-level erase (whole strokes vanish under the pointer)
+//   line/arrow/rect/ellipse  drag-from-to shapes, crisp Cairo rendering
+//   text         click, type into an inline entry, Enter places the label
+//
+// Keyboard (active in Draw mode, where the canvas holds shell key focus):
+//   1..8        select tool
+//   Ctrl+Z      undo          Ctrl+Shift+Z / Ctrl+Y  redo
+//   Escape      cancel text entry, or quit the tool
+//
 // Architecture (performance & Wayland notes):
 //
 //  * Two stacked transparent St.DrawingArea canvases are placed on
@@ -15,11 +27,15 @@
 //        stroke), never O(session history). Long handwriting sessions stay
 //        at constant frame cost — no main-thread stalls.
 //
-//  * Pass-through mode sets reactive = false on the live actor. Clutter
-//    picking skips non-reactive actors, so every click/gesture falls through
-//    to the desktop apps underneath — while both canvases keep painting the
-//    strokes 100% visibly. Strokes survive mode toggles; they are only
-//    dropped by the Clear button or by quitting the tool.
+//  * Pass-through mode sets reactive = false on the live actor (and drops
+//    key focus). Clutter picking skips non-reactive actors, so every click
+//    falls through to the desktop apps underneath — while both canvases
+//    keep painting the strokes 100% visibly. Strokes survive mode toggles;
+//    they are only dropped by Clear, Undo or quitting the tool.
+//
+//  * Undo/redo keeps snapshot stacks of the stroke list (capped). Every
+//    mutating action — stroke commit, text commit, eraser drag (once per
+//    drag, taken before the first removal), clear — pushes a snapshot.
 //
 //  * Pointer capture during a stroke uses global.stage.grab() (Clutter.Grab),
 //    the same mechanism GNOME Shell uses for its own popup menus. This is
@@ -27,8 +43,8 @@
 //    when the pointer crosses the toolbar. Every grab is dismissed on
 //    button-release AND during teardown, so no grab can leak.
 //
-//  * Every signal connection is registered through _track() and disconnected
-//    in _teardown(); destroy() is idempotent.
+//  * Every signal connection is registered through _track() (or tracked
+//    locally for the transient text entry) and disconnected on teardown.
 
 import Clutter from 'gi://Clutter';
 import St from 'gi://St';
@@ -38,7 +54,11 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const TOOLBAR_RIGHT_MARGIN = 24;
 const TOOLBAR_TOP_OFFSET = 80;
-const MIN_POINT_DIST = 1.5; // px — skip micro-jitter points to bound stroke size
+const TOOLBAR_WIDTH = 232;
+const MIN_POINT_DIST = 1.5;  // px — skip micro-jitter points to bound stroke size
+const SHAPE_MIN_DRAG = 4;    // px — a click shorter than this is not a shape
+const ERASER_PAD = 8;        // px — hit-testing slack around stroke ink
+const MAX_HISTORY = 100;     // undo snapshots kept
 
 // Preset ink colors (Neon Green, Cyan, Red, White).
 const COLORS = [
@@ -48,8 +68,26 @@ const COLORS = [
     {name: 'White',      css: '#ffffff', rgba: {r: 1.0,   g: 1.0,   b: 1.0,   a: 0.95}},
 ];
 
-// Stroke width presets in logical pixels.
+// Stroke width presets in logical pixels. For the text tool these map to
+// font sizes below.
 const WIDTHS = [2, 4, 8, 16];
+const TEXT_SIZES = {2: 24, 4: 36, 8: 54, 16: 78};
+
+// Toolbar tool buttons, in keyboard-selection order (1..8).
+const TOOLS = [
+    {id: 'pen',         label: '✏️'},
+    {id: 'highlighter', label: '🖍'},
+    {id: 'eraser',      label: '🧽'},
+    {id: 'line',        label: '╱'},
+    {id: 'arrow',       label: '→'},
+    {id: 'rect',        label: '▭'},
+    {id: 'ellipse',     label: '◯'},
+    {id: 'text',        label: 'T'},
+];
+const TOOL_KEYS = [
+    Clutter.KEY_1, Clutter.KEY_2, Clutter.KEY_3, Clutter.KEY_4,
+    Clutter.KEY_5, Clutter.KEY_6, Clutter.KEY_7, Clutter.KEY_8,
+];
 
 export class Writer {
     constructor() {
@@ -67,15 +105,28 @@ export class Writer {
         this._toolbar = null;
 
         // Drawing state
-        this._strokes = [];          // finished strokes: {color, width, points:[{x,y}]}
-        this._activeStroke = null;   // stroke currently under the pointer
+        this._tool = 'pen';
+        this._strokes = [];          // finished items: {type, color, width, points|from/to|at+text+size}
+        this._activeStroke = null;   // item currently under the pointer
         this._color = COLORS[0].rgba;
         this._width = WIDTHS[1];
+
+        // Undo / redo (snapshots of this._strokes)
+        this._undoStack = [];
+        this._redoStack = [];
+
+        // Eraser drag state
+        this._erasing = false;
+        this._eraseDirty = false;
+
+        // Text tool: {entry, at, handlers} while the inline entry is open
+        this._textEntry = null;
 
         // Toolbar widgets
         this._modeButton = null;
         this._colorButtons = [];
         this._widthButtons = [];
+        this._toolButtons = new Map();
 
         // Interaction state
         this._drawGrab = null;       // Clutter.Grab while a stroke is in progress
@@ -94,7 +145,7 @@ export class Writer {
         return this._active;
     }
 
-    /** Build the actors and start annotating (defaults to Draw mode). */
+    /** Build the actors and start writing (defaults to pen in Draw mode). */
     enable() {
         if (this._active || this._destroyed)
             return;
@@ -165,22 +216,28 @@ export class Writer {
         this._committedActor.reactive = false;
         this._committedActor.set_position(m.x, m.y);
 
-        // Top layer: live stroke + event surface.
+        // Top layer: live item + event surface + key focus for shortcuts.
         this._liveCanvas = this._makeCanvas(
             a => this._onLiveDraw(a));
         this._liveActor = this._liveCanvas;
         this._liveActor.name = 'alphaWriterLive';
         this._liveActor.reactive = true;
+        this._liveActor.can_focus = true;
         this._liveActor.set_position(m.x, m.y);
 
-        // Pointer events for freehand drawing. The stage grab started in
-        // _onPress routes motion/release here even outside actor bounds.
+        // Pointer events. The stage grab started in _onPress routes
+        // motion/release here even outside actor bounds.
         this._track(this._liveActor, 'button-press-event',
             (a, e) => this._onPress(e));
         this._track(this._liveActor, 'motion-event',
             (a, e) => this._onMotion(e));
         this._track(this._liveActor, 'button-release-event',
             (a, e) => this._onRelease(e));
+
+        // Keyboard shortcuts (only delivered while the canvas holds key
+        // focus, i.e. in Draw mode).
+        this._track(this._liveActor, 'key-press-event',
+            (a, e) => this._onKeyPress(e));
 
         const uiGroup = Main.layoutManager.uiGroup;
         uiGroup.add_child(this._committedActor);
@@ -240,6 +297,26 @@ export class Writer {
             () => this._setDrawMode(!this._drawMode));
         this._toolbar.add_child(this._modeButton);
 
+        // --- Tools (2 rows x 4) ------------------------------------------
+        this._toolbar.add_child(this._sectionLabel('Tool'));
+
+        for (let row = 0; row < 2; row++) {
+            const toolRow = new St.BoxLayout({style_class: 'alpha-writer-row'});
+            for (let col = 0; col < 4; col++) {
+                const tool = TOOLS[row * 4 + col];
+                const btn = new St.Button({
+                    label: tool.label,
+                    style_class: 'alpha-writer-btn alpha-writer-tool-btn',
+                });
+                this._track(btn, 'clicked', () => this._setTool(tool.id));
+                if (tool.id === this._tool)
+                    btn.add_style_class_name('selected');
+                this._toolButtons.set(tool.id, btn);
+                toolRow.add_child(btn);
+            }
+            this._toolbar.add_child(toolRow);
+        }
+
         // --- Colors -----------------------------------------------------
         this._toolbar.add_child(
             this._sectionLabel('Color'));
@@ -262,9 +339,9 @@ export class Writer {
         });
         this._toolbar.add_child(colorRow);
 
-        // --- Stroke width -------------------------------------------------
+        // --- Width / text size -------------------------------------------
         this._toolbar.add_child(
-            this._sectionLabel('Stroke'));
+            this._sectionLabel('Width / Size'));
 
         const widthRow = new St.BoxLayout({style_class: 'alpha-writer-row'});
         this._widthButtons = WIDTHS.map((width, index) => {
@@ -283,6 +360,27 @@ export class Writer {
             return btn;
         });
         this._toolbar.add_child(widthRow);
+
+        // --- Undo / Redo --------------------------------------------------
+        const historyRow = new St.BoxLayout({style_class: 'alpha-writer-row'});
+
+        const undoBtn = new St.Button({
+            label: '↩  Undo',
+            style_class: 'alpha-writer-btn alpha-writer-undo-btn',
+            x_expand: true,
+        });
+        this._track(undoBtn, 'clicked', () => this.undo());
+        historyRow.add_child(undoBtn);
+
+        const redoBtn = new St.Button({
+            label: '↪  Redo',
+            style_class: 'alpha-writer-btn alpha-writer-redo-btn',
+            x_expand: true,
+        });
+        this._track(redoBtn, 'clicked', () => this.redo());
+        historyRow.add_child(redoBtn);
+
+        this._toolbar.add_child(historyRow);
 
         // --- Clear / Close ------------------------------------------------
         const actionRow = new St.BoxLayout({style_class: 'alpha-writer-row'});
@@ -307,7 +405,7 @@ export class Writer {
         // Place at the top-right of the primary monitor.
         Main.layoutManager.uiGroup.add_child(this._toolbar);
         this._toolbar.set_position(
-            m.x + m.width - 220 - TOOLBAR_RIGHT_MARGIN,
+            m.x + m.width - TOOLBAR_WIDTH - TOOLBAR_RIGHT_MARGIN,
             m.y + TOOLBAR_TOP_OFFSET);
     }
 
@@ -319,16 +417,21 @@ export class Writer {
     }
 
     // ------------------------------------------------------------------
-    // Modes
+    // Modes & tools
     // ------------------------------------------------------------------
 
     _setDrawMode(draw) {
         this._drawMode = draw;
 
+        if (this._textEntry)
+            this._cancelText();
+
         // In pass-through mode the live actor becomes invisible to the
         // picking machinery: clicks land on the desktop windows below while
-        // both canvases keep painting the existing strokes.
+        // both canvases keep painting the existing strokes. Key focus is
+        // dropped as well so the apps receive keyboard input again.
         this._liveActor.reactive = draw;
+        global.stage.set_key_focus(draw ? this._liveActor : null);
 
         this._modeButton.label = draw ? '✏️  Draw' : '🖱️  Pass-Through';
         this._modeButton.remove_style_class_name('alpha-mode-draw');
@@ -336,10 +439,75 @@ export class Writer {
         this._modeButton.add_style_class_name(draw ? 'alpha-mode-draw' : 'alpha-mode-pass');
     }
 
-    /** Wipe the Cairo contexts and request a redraw of both layers. */
+    _setTool(tool) {
+        if (this._textEntry)
+            this._cancelText();
+
+        this._tool = tool;
+        for (const [id, btn] of this._toolButtons) {
+            btn.remove_style_class_name('selected');
+            if (id === tool)
+                btn.add_style_class_name('selected');
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // History (undo / redo)
+    // ------------------------------------------------------------------
+
+    _snapshot() {
+        return this._strokes.map(s => {
+            const c = {...s};
+            if (c.points)
+                c.points = c.points.map(p => ({x: p.x, y: p.y}));
+            if (c.from)
+                c.from = {...c.from};
+            if (c.to)
+                c.to = {...c.to};
+            if (c.at)
+                c.at = {...c.at};
+            return c;
+        });
+    }
+
+    /** Push the current state as an undo point and drop the redo stack. */
+    _pushHistory() {
+        this._undoStack.push(this._snapshot());
+        if (this._undoStack.length > MAX_HISTORY)
+            this._undoStack.shift();
+        this._redoStack = [];
+    }
+
+    undo() {
+        if (!this._undoStack.length)
+            return;
+
+        this._redoStack.push(this._snapshot());
+        this._strokes = this._undoStack.pop();
+        this._repaint();
+    }
+
+    redo() {
+        if (!this._redoStack.length)
+            return;
+
+        this._undoStack.push(this._snapshot());
+        this._strokes = this._redoStack.pop();
+        this._repaint();
+    }
+
+    /** Wipe the canvas (undoable). */
     clear() {
+        if (!this._strokes.length && !this._activeStroke)
+            return;
+
+        this._pushHistory();
         this._strokes = [];
         this._activeStroke = null;
+        this._repaint();
+    }
+
+    _repaint() {
         if (this._committedCanvas)
             this._committedCanvas.queue_repaint();
         if (this._liveCanvas)
@@ -347,21 +515,48 @@ export class Writer {
     }
 
     // ------------------------------------------------------------------
-    // Pointer input — freehand drawing
+    // Pointer input — dispatch by tool
     // ------------------------------------------------------------------
 
     _onPress(event) {
         if (!this._drawMode || event.get_button() !== 1)
             return Clutter.EVENT_PROPAGATE;
 
-        const [sx, sy] = event.get_coords();
-        this._activeStroke = {
-            color: this._color,
-            width: this._width,
-            points: [this._localPoint(sx, sy)],
-        };
+        // Any canvas press closes a pending text entry first.
+        if (this._textEntry)
+            this._cancelText();
 
-        // Capture the pointer for the whole stroke (Wayland-safe).
+        const [sx, sy] = event.get_coords();
+        const p = this._localPoint(sx, sy);
+
+        if (this._tool === 'text') {
+            this._beginTextInput(p);
+            return Clutter.EVENT_STOP;
+        }
+
+        if (this._tool === 'eraser') {
+            this._erasing = true;
+            this._eraseDirty = false;
+            this._eraseAt(p);
+        } else if (this._tool === 'pen' || this._tool === 'highlighter') {
+            this._activeStroke = {
+                type: this._tool,
+                color: this._color,
+                width: this._width,
+                points: [p],
+            };
+        } else {
+            // Shapes: from/to drag model.
+            this._activeStroke = {
+                type: this._tool,
+                color: this._color,
+                width: this._width,
+                from: p,
+                to: {x: p.x, y: p.y},
+            };
+        }
+
+        // Capture the pointer for the whole gesture (Wayland-safe).
         this._drawGrab = this._beginGrab(this._liveActor);
 
         this._liveCanvas.queue_repaint();
@@ -369,44 +564,287 @@ export class Writer {
     }
 
     _onMotion(event) {
+        const [sx, sy] = event.get_coords();
+        const p = this._localPoint(sx, sy);
+
+        if (this._erasing) {
+            this._eraseAt(p);
+            return Clutter.EVENT_STOP;
+        }
+
         if (!this._activeStroke)
             return Clutter.EVENT_PROPAGATE;
 
-        const [sx, sy] = event.get_coords();
-        const p = this._localPoint(sx, sy);
-        const pts = this._activeStroke.points;
-        const last = pts[pts.length - 1];
+        if (this._activeStroke.points) {
+            // Freehand: append points, skipping micro-jitter.
+            const pts = this._activeStroke.points;
+            const last = pts[pts.length - 1];
+            const dx = p.x - last.x;
+            const dy = p.y - last.y;
+            if (dx * dx + dy * dy < MIN_POINT_DIST * MIN_POINT_DIST)
+                return Clutter.EVENT_STOP;
+            pts.push(p);
+        } else {
+            // Shape: just move the endpoint.
+            this._activeStroke.to = p;
+        }
 
-        const dx = p.x - last.x;
-        const dy = p.y - last.y;
-        if (dx * dx + dy * dy < MIN_POINT_DIST * MIN_POINT_DIST)
-            return Clutter.EVENT_STOP;
-
-        pts.push(p);
         this._liveCanvas.queue_repaint();
         return Clutter.EVENT_STOP;
     }
 
     _onRelease(event) {
+        if (this._erasing) {
+            this._erasing = false;
+            this._eraseDirty = false;
+            this._endGrab(this._drawGrab);
+            this._drawGrab = null;
+            return Clutter.EVENT_STOP;
+        }
+
         if (!this._activeStroke)
             return Clutter.EVENT_PROPAGATE;
 
         this._endGrab(this._drawGrab);
         this._drawGrab = null;
 
-        // Commit: the finished stroke moves to the bottom canvas; the live
-        // canvas goes back to empty. Strokes survive mode switches.
-        this._strokes.push(this._activeStroke);
+        const s = this._activeStroke;
         this._activeStroke = null;
 
-        this._committedCanvas.queue_repaint();
-        this._liveCanvas.queue_repaint();
+        if (s.points) {
+            // Freehand: a bare click stays a dot, never an empty stroke.
+            if (s.points.length === 0) {
+                this._liveCanvas.queue_repaint();
+                return Clutter.EVENT_STOP;
+            }
+        } else {
+            // Shape: a click without a drag is discarded.
+            const d = Math.hypot(s.to.x - s.from.x, s.to.y - s.from.y);
+            if (d < SHAPE_MIN_DRAG) {
+                this._liveCanvas.queue_repaint();
+                return Clutter.EVENT_STOP;
+            }
+        }
+
+        // Commit: the finished item moves to the bottom canvas; the live
+        // canvas goes back to empty. Strokes survive mode switches.
+        this._pushHistory();
+        this._strokes.push(s);
+
+        this._repaint();
         return Clutter.EVENT_STOP;
     }
 
     _localPoint(stageX, stageY) {
         const m = this._monitor;
         return {x: stageX - m.x, y: stageY - m.y};
+    }
+
+    // ------------------------------------------------------------------
+    // Keyboard shortcuts (canvas key focus, Draw mode only)
+    // ------------------------------------------------------------------
+
+    _onKeyPress(event) {
+        const keyval = event.get_key_symbol();
+        const state = event.get_state();
+        const ctrl = (state & Clutter.ModifierType.CONTROL_MASK) !== 0;
+        const shift = (state & Clutter.ModifierType.SHIFT_MASK) !== 0;
+
+        if (ctrl && (keyval === Clutter.KEY_z || keyval === Clutter.KEY_Z)) {
+            if (shift)
+                this.redo();
+            else
+                this.undo();
+            return Clutter.EVENT_STOP;
+        }
+
+        if (ctrl && (keyval === Clutter.KEY_y || keyval === Clutter.KEY_Y)) {
+            this.redo();
+            return Clutter.EVENT_STOP;
+        }
+
+        if (keyval === Clutter.KEY_Escape) {
+            if (this._textEntry)
+                this._cancelText();
+            else
+                this.disable();
+            return Clutter.EVENT_STOP;
+        }
+
+        const toolIndex = TOOL_KEYS.indexOf(keyval);
+        if (toolIndex >= 0) {
+            this._setTool(TOOLS[toolIndex].id);
+            return Clutter.EVENT_STOP;
+        }
+
+        return Clutter.EVENT_PROPAGATE;
+    }
+
+    // ------------------------------------------------------------------
+    // Eraser
+    // ------------------------------------------------------------------
+
+    /** Remove every stroke whose ink is under p. The undo snapshot is taken
+     *  before the FIRST removal of a drag, so one drag = one undo step. */
+    _eraseAt(p) {
+        if (!this._strokes.length)
+            return;
+
+        const kept = [];
+        let removed = false;
+        for (const s of this._strokes) {
+            if (this._strokeHit(s, p))
+                removed = true;
+            else
+                kept.push(s);
+        }
+        if (!removed)
+            return;
+
+        if (!this._eraseDirty) {
+            this._undoStack.push(this._snapshot());
+            if (this._undoStack.length > MAX_HISTORY)
+                this._undoStack.shift();
+            this._redoStack = [];
+            this._eraseDirty = true;
+        }
+
+        this._strokes = kept;
+        this._committedCanvas.queue_repaint();
+    }
+
+    /** Rough hit-test of a point against a stroke's ink. */
+    _strokeHit(s, p) {
+        if (s.type === 'text') {
+            const w = s.text.length * s.size * 0.55;
+            return p.x >= s.at.x - ERASER_PAD && p.x <= s.at.x + w + ERASER_PAD &&
+                   p.y >= s.at.y - ERASER_PAD && p.y <= s.at.y + s.size + ERASER_PAD;
+        }
+
+        const ink = this._inkWidth(s) / 2 + ERASER_PAD;
+
+        if (s.type === 'rect') {
+            const x0 = Math.min(s.from.x, s.to.x);
+            const x1 = Math.max(s.from.x, s.to.x);
+            const y0 = Math.min(s.from.y, s.to.y);
+            const y1 = Math.max(s.from.y, s.to.y);
+            return p.x >= x0 - ink && p.x <= x1 + ink &&
+                   p.y >= y0 - ink && p.y <= y1 + ink;
+        }
+
+        if (s.type === 'ellipse') {
+            const cx = (s.from.x + s.to.x) / 2;
+            const cy = (s.from.y + s.to.y) / 2;
+            const rx = Math.abs(s.to.x - s.from.x) / 2 + ink || ink;
+            const ry = Math.abs(s.to.y - s.from.y) / 2 + ink || ink;
+            const nx = (p.x - cx) / rx;
+            const ny = (p.y - cy) / ry;
+            return nx * nx + ny * ny <= 1;
+        }
+
+        // Freehand polylines and lines/arrows: segment distance.
+        const segs = s.points
+            ? s.points.map((pt, i) => [i === 0 ? pt : s.points[i - 1], pt])
+            : [[s.from, s.to]];
+        return segs.some(([a, b]) => this._segDist(p, a, b) <= ink);
+    }
+
+    _segDist(p, a, b) {
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const len2 = dx * dx + dy * dy;
+        let t = len2 ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2 : 0;
+        t = Math.max(0, Math.min(1, t));
+        return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+    }
+
+    _inkWidth(s) {
+        return s.type === 'highlighter' ? s.width * 4 : s.width;
+    }
+
+    // ------------------------------------------------------------------
+    // Text tool — inline entry
+    // ------------------------------------------------------------------
+
+    _beginTextInput(p) {
+        // Only one entry at a time.
+        this._destroyTextEntry();
+
+        const m = this._monitor;
+        const entry = new St.Entry({
+            style_class: 'alpha-writer-text-entry',
+            hint_text: 'Type…  (Enter places · Esc cancels)',
+            can_focus: true,
+        });
+
+        const ct = entry.clutter_text;
+        const handlers = [
+            {obj: ct, id: ct.connect('activate', () => this._commitText())},
+            {obj: ct, id: ct.connect('key-press-event', (a, e) => {
+                if (e.get_key_symbol() === Clutter.KEY_Escape) {
+                    this._cancelText();
+                    return Clutter.EVENT_STOP;
+                }
+                return Clutter.EVENT_PROPAGATE;
+            })},
+        ];
+
+        entry.set_position(m.x + p.x, m.y + p.y);
+        Main.layoutManager.uiGroup.add_child(entry);
+
+        this._textEntry = {entry, at: p, handlers};
+        ct.grab_key_focus();
+    }
+
+    _commitText() {
+        const rec = this._textEntry;
+        if (!rec)
+            return;
+
+        const text = rec.entry.get_text().trim();
+        this._destroyTextEntry();
+
+        if (!text)
+            return;
+
+        this._pushHistory();
+        this._strokes.push({
+            type: 'text',
+            color: this._color,
+            size: TEXT_SIZES[this._width] ?? 36,
+            at: rec.at,
+            text,
+        });
+        this._repaint();
+    }
+
+    _cancelText() {
+        this._destroyTextEntry();
+    }
+
+    /** Tear down the entry (no commit) and hand key focus back to the
+     *  canvas so shortcuts keep working. */
+    _destroyTextEntry() {
+        const rec = this._textEntry;
+        if (!rec)
+            return;
+
+        this._textEntry = null;
+        for (const {obj, id} of rec.handlers) {
+            try {
+                obj.disconnect(id);
+            } catch (e) {
+                // Object already destroyed — fine.
+            }
+        }
+        try {
+            rec.entry.destroy();
+        } catch (e) {
+            // Already destroyed — fine.
+        }
+
+        if (this._active && this._drawMode && this._liveActor)
+            global.stage.set_key_focus(this._liveActor);
     }
 
     // ------------------------------------------------------------------
@@ -492,25 +930,53 @@ export class Writer {
         cr.restore();
     }
 
+    _paintStroke(cr, s) {
+        switch (s.type) {
+        case 'text':
+            return this._paintText(cr, s);
+        case 'line':
+        case 'arrow':
+            return this._paintLine(cr, s);
+        case 'rect':
+            return this._paintRect(cr, s);
+        case 'ellipse':
+            return this._paintEllipse(cr, s);
+        case 'highlighter':
+            return this._paintFreehand(cr, s, true);
+        default:
+            return this._paintFreehand(cr, s, false);
+        }
+    }
+
+    _applyInk(cr, s, alpha = s.color.a, width = s.width,
+        cap = Cairo.LineCap.ROUND) {
+        cr.setSourceRGBA(s.color.r, s.color.g, s.color.b, alpha);
+        cr.setLineWidth(width);
+        cr.setLineCap(cap);
+        cr.setLineJoin(cap === Cairo.LineCap.BUTT
+            ? Cairo.LineJoin.BEVEL
+            : Cairo.LineJoin.ROUND);
+    }
+
     /**
-     * Paint one stroke with quadratic-bezier midpoint smoothing:
+     * Paint one freehand stroke with quadratic-bézier midpoint smoothing:
      * each interior point becomes a control point whose curve ends at the
      * midpoint towards the next point. Single points render as round dots.
      */
-    _paintStroke(cr, stroke) {
-        const pts = stroke.points;
-        if (pts.length === 0)
+    _paintFreehand(cr, s, isHighlighter) {
+        const pts = s.points;
+        if (!pts || pts.length === 0)
             return;
 
-        cr.setSourceRGBA(
-            stroke.color.r, stroke.color.g, stroke.color.b, stroke.color.a);
-        cr.setLineWidth(stroke.width);
-        cr.setLineCap(Cairo.LineCap.ROUND);
-        cr.setLineJoin(Cairo.LineJoin.ROUND);
+        if (isHighlighter)
+            this._applyInk(cr, s, s.color.a * 0.35, s.width * 4, Cairo.LineCap.BUTT);
+        else
+            this._applyInk(cr, s);
 
         if (pts.length === 1) {
             // A bare click — draw a dot instead of a zero-length line.
-            cr.arc(pts[0].x, pts[0].y, stroke.width / 2, 0, 2 * Math.PI);
+            cr.arc(pts[0].x, pts[0].y, (isHighlighter ? s.width * 4 : s.width) / 2,
+                0, 2 * Math.PI);
             cr.fill();
             return;
         }
@@ -539,6 +1005,66 @@ export class Writer {
         }
 
         cr.stroke();
+    }
+
+    _paintLine(cr, s) {
+        this._applyInk(cr, s);
+        cr.moveTo(s.from.x, s.from.y);
+        cr.lineTo(s.to.x, s.to.y);
+        cr.stroke();
+
+        if (s.type === 'arrow')
+            this._paintArrowHead(cr, s);
+    }
+
+    _paintArrowHead(cr, s) {
+        const angle = Math.atan2(s.to.y - s.from.y, s.to.x - s.from.x);
+        const len = Math.max(14, s.width * 3.5);
+        const a1 = angle + 0.42 * Math.PI;
+        const a2 = angle - 0.42 * Math.PI;
+
+        cr.moveTo(s.to.x + len * Math.cos(a1), s.to.y + len * Math.sin(a1));
+        cr.lineTo(s.to.x, s.to.y);
+        cr.lineTo(s.to.x + len * Math.cos(a2), s.to.y + len * Math.sin(a2));
+        cr.closePath();
+        cr.fill();
+    }
+
+    _paintRect(cr, s) {
+        this._applyInk(cr, s);
+        const x = Math.min(s.from.x, s.to.x);
+        const y = Math.min(s.from.y, s.to.y);
+        cr.rectangle(x, y, Math.abs(s.to.x - s.from.x), Math.abs(s.to.y - s.from.y));
+        cr.stroke();
+    }
+
+    _paintEllipse(cr, s) {
+        this._applyInk(cr, s);
+        const cx = (s.from.x + s.to.x) / 2;
+        const cy = (s.from.y + s.to.y) / 2;
+        const rx = Math.max(Math.abs(s.to.x - s.from.x) / 2, 0.01);
+        const ry = Math.max(Math.abs(s.to.y - s.from.y) / 2, 0.01);
+
+        // Build a unit circle under a scale transform, then restore before
+        // stroking: the path stays where it was built but the line width
+        // is no longer distorted by the scale.
+        cr.save();
+        cr.translate(cx, cy);
+        cr.scale(rx, ry);
+        cr.arc(0, 0, 1, 0, 2 * Math.PI);
+        cr.restore();
+        cr.stroke();
+    }
+
+    _paintText(cr, s) {
+        cr.setSourceRGBA(s.color.r, s.color.g, s.color.b, s.color.a);
+        cr.selectFontFace('Sans',
+            Cairo.FontSlant.NORMAL, Cairo.FontWeight.BOLD);
+        cr.setFontSize(s.size);
+        // The entry's top-left was the click point; place the baseline
+        // roughly one ascent below it so the label lands where you typed.
+        cr.moveTo(s.at.x, s.at.y + s.size * 0.8);
+        cr.showText(s.text);
     }
 
     // ------------------------------------------------------------------
@@ -571,6 +1097,9 @@ export class Writer {
         if (!this._active)
             return;
 
+        // A pending text entry would land at stale coordinates — drop it.
+        this._cancelText();
+
         this._monitor = Main.layoutManager.primaryMonitor;
         const m = this._monitor;
 
@@ -600,6 +1129,11 @@ export class Writer {
         this._dragGrab = null;
         this._dragStart = null;
 
+        // Drop the text entry and key focus before destroying the actors.
+        this._destroyTextEntry();
+        this._drawMode = false;
+        global.stage.set_key_focus(null);
+
         for (const {object, id} of this._handlers) {
             try {
                 object.disconnect(id);
@@ -611,6 +1145,10 @@ export class Writer {
 
         this._strokes = [];
         this._activeStroke = null;
+        this._undoStack = [];
+        this._redoStack = [];
+        this._erasing = false;
+        this._eraseDirty = false;
 
         if (this._toolbar) {
             this._toolbar.destroy();
@@ -619,6 +1157,7 @@ export class Writer {
         this._modeButton = null;
         this._colorButtons = [];
         this._widthButtons = [];
+        this._toolButtons.clear();
 
         if (this._liveActor) {
             this._liveActor.destroy();

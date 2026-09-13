@@ -100,6 +100,39 @@
     color: #2bff88;
 }
 
+/* Tool buttons (pen / highlighter / eraser / shapes / text) */
+.alpha-writer-tool-btn {
+    width: 44px;
+    min-width: 44px;
+    padding: 6px 0;
+    text-align: center;
+    font-size: 15px;
+}
+
+.alpha-writer-tool-btn.selected {
+    background-color: rgba(43, 255, 136, 0.22);
+    border-color: rgba(43, 255, 136, 0.6);
+    color: #2bff88;
+}
+
+/* Undo / Redo buttons */
+.alpha-writer-undo-btn,
+.alpha-writer-redo-btn {
+    min-width: 90px;
+}
+
+/* Inline text entry (text tool) */
+.alpha-writer-text-entry {
+    background-color: rgba(18, 18, 26, 0.96);
+    border: 2px solid rgba(43, 255, 136, 0.6);
+    border-radius: 8px;
+    padding: 5px 10px;
+    color: #ffffff;
+    font-size: 15px;
+    caret-color: #2bff88;
+    min-width: 260px;
+}
+
 /* Clear / Close buttons */
 .alpha-writer-clear:hover {
     background-color: rgba(255, 71, 87, 0.25);
