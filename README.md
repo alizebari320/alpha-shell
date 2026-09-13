@@ -1,43 +1,40 @@
 # ALPHA Shell
 
-A GNOME Shell extension that provides a keyboard-activated AI overlay. The
-extension is the **foundation** — the AI overlay UI, a model/provider catalog,
-and a safe command-execution workflow are all scaffolded, but no AI provider
-is wired yet. No API calls are made and no credentials are stored.
+A GNOME Shell extension (Fedora 44 / GNOME Shell 50, ESM, Wayland) whose
+current flagship tool is **ALPHA Writer** — a screen annotation and
+handwriting layer that floats above your desktop.
 
-## What ALPHA Shell is
+## ALPHA Writer
 
-ALPHA Shell adds a fullscreen overlay (toggled with `Super` + `Space`) that will
-eventually let you ask the AI, summarize text, explain code, generate shell
-commands, analyze screenshots and search — through multiple, configurable model
-providers. Today it renders a placeholder card so the UI, shortcut, and
-settings plumbing can be tested end-to-end.
+Toggle it with `Ctrl+Alt+D` (configurable in Preferences) or from the
+ALPHA Shell panel icon. A floating toolbar appears; draw directly on the
+screen with your mouse or tablet.
 
-## Features currently implemented
+- **Draw mode** — the canvas captures the pointer and draws freehand
+  strokes with quadratic-bézier midpoint smoothing (constant frame cost:
+  the live layer replays only the active stroke, never the session
+  history).
+- **Pass-through mode** — strokes stay 100% visible while every click,
+  gesture and window interaction falls through to the desktop apps below.
+- 4 preset ink colors (Neon Green, Cyan, Red, White) and stroke widths
+  (2/4/8/16 px).
+- Draggable floating toolbar that stays interactive in pass-through mode.
+- Clear (🗑) wipes the canvas; Close (✕) quits the tool.
+- Wayland-safe pointer capture via `global.stage.grab()` (Clutter.Grab);
+  all signal handlers are tracked and disconnected on teardown.
 
-- GNOME Shell 50 extension scaffold (ESM, modern `Extension` base class)
-- Fullscreen overlay UI, toggled with `Super` + `Space`
-- Stylesheet (auto-loaded by the shell from `stylesheet.css`)
-- GSettings schema for the shortcut + provider/model selection
-- AI architecture:
-  - Provider abstraction (`ai/providers.js`)
-  - Model catalog with capabilities (`ai/models.js`)
-  - Single service facade with one method per operation (`ai/ai.js`)
-  - Safe command execution workflow — proposed, never auto-run (`ai/safety.js`)
-- Preferences page with provider/model dropdowns (writes ids to settings only)
+## Architecture
 
-## Features planned (not implemented)
-
-- Ask AI from the overlay (live input)
-- Send selected text to AI
-- Summarize text
-- Explain code
-- Generate commands (routed through the safety gate)
-- Analyze screenshots
-- Search with AI
-- Execute approved commands through a safe workflow
-- Multiple real model providers (xAI, OpenAI, local LLM, …)
-- Credential storage via GNOME libsecret (never in source)
+- Two stacked `St.DrawingArea` canvases on `Main.layoutManager.uiGroup`:
+  a "committed" layer for finished strokes and a "live" layer for the
+  stroke currently under the pointer. (GNOME 50 removed `Clutter.Canvas`;
+  `St.DrawingArea` is its supported replacement.)
+- `ui/writer.js` — the `Writer` class, fully self-contained:
+  `enable()` / `disable()` / `destroy()` are the whole lifecycle surface.
+- `ui/indicator.js` — panel button + tool menu.
+- `extension.js` — entry point: wires the indicator and keybinding.
+- `ai/` — provider/model architecture kept for future AI features
+  (nothing wired, no network calls).
 
 ## Requirements
 
@@ -57,7 +54,7 @@ ln -s ~/alpha-shell ~/.local/share/gnome-shell/extensions/alpha-shell@donk
 # compile the GSettings schema
 glib-compile-schemas ~/alpha-shell/schemas
 
-# restart the shell (Wayland: log out and back in)
+# Wayland: log out and back in to load the extension code
 ```
 
 ## Enable / Disable
@@ -98,45 +95,33 @@ gnome-extensions prefs alpha-shell@donk
 ```
 alpha-shell/
 ├── extension.js            # entry point: wiring + keyboard shortcut
-├── prefs.js                # preferences window (provider/model selection)
-├── stylesheet.css          # overlay styling (auto-loaded by the shell)
+├── prefs.js                # preferences window (shortcut, provider/model)
+├── stylesheet.css          # ALPHA Writer styling (auto-loaded by the shell)
 ├── metadata.json           # extension metadata
 ├── package.json            # project metadata
 ├── schemas/
 │   └── org.gnome.shell.extensions.alpha-shell.gschema.xml
-├── ai/
+├── ai/                     # AI architecture (future features, unwired)
 │   ├── ai.js               # AIService facade (one method per operation)
 │   ├── models.js           # provider + model catalog (placeholders)
 │   ├── providers.js        # AIProvider base class + registry
 │   └── safety.js           # command approval / safe-execution workflow
-├── ui/
-│   └── overlay.js          # fullscreen overlay widget
-├── .gitignore
-└── README.md
+└── ui/
+    ├── writer.js           # ALPHA Writer (screen annotation)
+    └── indicator.js        # panel indicator + tool menu
 ```
 
 ## Known limitations
 
-- No AI provider is wired: every operation in `ai/ai.js` is an intentional
-  stub that rejects with a clear "not implemented" message.
-- Model names / providers in `ai/models.js` are placeholders supplied as
-  examples; they do not map to real endpoints.
-- Command execution in `ai/safety.js` is deliberately absent (safety gate).
-- Wayland session: shell must be restarted (log out/in) to load new native
-  code; `journalctl` is the primary debugging channel.
+- Wayland session: shell must be restarted (log out/in) to load new code;
+  `journalctl` is the primary debugging channel.
+- Single-monitor (primary) coverage; strokes are dropped on monitor
+  layout changes.
 
-## How to add a new module
+## How to add a new tool
 
-1. Create a file inside an existing folder (`ai/`, `ui/`) or a new folder.
-2. Export a class or a set of functions with `export`.
-3. Import and instantiate it from `extension.js` (or a parent module) inside
-   `enable()`, and clean it up in `disable()`.
-4. Update this README if the module is user-facing.
-
-## How to add a new UI component
-
-1. Add a class to `ui/` (mirroring `ui/overlay.js`): build an `St` widget,
-   expose `show()` / `hide()` / `destroy()`.
-2. Add `St.ThemeNode`-style selectors to `stylesheet.css`.
-3. Instantiate the component from `extension.js` and attach it to
-   `Main.layoutManager.uiGroup` (for fullscreen overlays) or a shell container.
+1. Create `ui/<tool>.js` exporting a class with `enable()` / `disable()` /
+   `destroy()` — model it on `ui/writer.js`.
+2. Add an entry to the indicator menu and a keybinding in `extension.js`.
+3. Style it in `stylesheet.css` with an `alpha-<tool>-*` prefix.
+4. Update this README if the tool is user-facing.

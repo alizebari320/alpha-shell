@@ -8,32 +8,9 @@
     padding: 0 6px;
 }
 
-.alpha-overlay {
-    background-color: rgba(16, 16, 24, 0.55);
-}
+/* ---- ALPHA Writer (ui/writer.js) ---- */
 
-.alpha-overlay-card {
-    background-color: #1e1e28;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 16px;
-    padding: 32px 48px;
-}
-
-.alpha-overlay-title {
-    color: #ffffff;
-    font-size: 28px;
-    font-weight: bold;
-}
-
-.alpha-overlay-subtitle {
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 15px;
-    margin-top: 8px;
-}
-
-/* ---- Screen Annotator / Handwriting (ui/annotator.js) ---- */
-
-.alpha-annotator-toolbar {
+.alpha-writer-toolbar {
     background-color: rgba(18, 18, 26, 0.94);
     border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 14px;
@@ -44,29 +21,29 @@
     box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
 }
 
-.alpha-annotator-drag {
+.alpha-writer-drag {
     spacing: 8px;
     padding: 2px 4px 8px 4px;
     color: rgba(255, 255, 255, 0.6);
     font-weight: bold;
 }
 
-.alpha-annotator-drag:hover {
+.alpha-writer-drag:hover {
     color: #ffffff;
 }
 
-.alpha-annotator-section {
+.alpha-writer-section {
     color: rgba(255, 255, 255, 0.45);
     font-size: 11px;
     font-weight: bold;
     padding-left: 2px;
 }
 
-.alpha-annotator-row {
+.alpha-writer-row {
     spacing: 8px;
 }
 
-.alpha-annotator-btn {
+.alpha-writer-btn {
     background-color: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 8px;
@@ -76,25 +53,25 @@
     min-height: 18px;
 }
 
-.alpha-annotator-btn:hover {
+.alpha-writer-btn:hover {
     background-color: rgba(255, 255, 255, 0.18);
 }
 
 /* Mode toggle states */
-.alpha-annotator-mode.alpha-mode-draw {
+.alpha-writer-mode.alpha-mode-draw {
     background-color: rgba(43, 255, 136, 0.16);
     border-color: rgba(43, 255, 136, 0.55);
     color: #2bff88;
 }
 
-.alpha-annotator-mode.alpha-mode-pass {
+.alpha-writer-mode.alpha-mode-pass {
     background-color: rgba(255, 196, 84, 0.14);
     border-color: rgba(255, 196, 84, 0.5);
     color: #ffc454;
 }
 
 /* Color chips — background-color comes from inline style, the frame from here */
-.alpha-annotator-chip {
+.alpha-writer-chip {
     width: 24px;
     height: 24px;
     min-width: 24px;
@@ -104,32 +81,32 @@
     border-radius: 14px;
 }
 
-.alpha-annotator-chip.selected {
+.alpha-writer-chip.selected {
     border-color: #ffffff;
     box-shadow: 0 0 8px rgba(255, 255, 255, 0.55);
 }
 
 /* Stroke width buttons */
-.alpha-annotator-width-btn {
+.alpha-writer-width-btn {
     width: 34px;
     min-width: 34px;
     padding: 6px 0;
     text-align: center;
 }
 
-.alpha-annotator-width-btn.selected {
+.alpha-writer-width-btn.selected {
     background-color: rgba(43, 255, 136, 0.22);
     border-color: rgba(43, 255, 136, 0.6);
     color: #2bff88;
 }
 
 /* Clear / Close buttons */
-.alpha-annotator-clear:hover {
+.alpha-writer-clear:hover {
     background-color: rgba(255, 71, 87, 0.25);
     border-color: rgba(255, 71, 87, 0.6);
 }
 
-.alpha-annotator-close:hover {
+.alpha-writer-close:hover {
     background-color: rgba(255, 71, 87, 0.4);
     border-color: rgba(255, 71, 87, 0.8);
 }

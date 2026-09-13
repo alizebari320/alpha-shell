@@ -1,30 +1,23 @@
-import Gio from 'gi://Gio';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-import {AIService} from './ai/ai.js';
-import {AIOverlay} from './ui/overlay.js';
-import {Annotator} from './ui/annotator.js';
+import {Writer} from './ui/writer.js';
 import {Indicator} from './ui/indicator.js';
 
 export default class AlphaShellExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
-        this.ai = new AIService(this._settings);
-        this.overlay = new AIOverlay();
-        this.annotator = new Annotator();
+        this.writer = new Writer();
 
         this._indicator = new Indicator({
-            onToggleOverlay: this._toggleOverlay.bind(this),
-            onToggleAnnotator: this._toggleAnnotator.bind(this),
+            onToggleWriter: this._toggleWriter.bind(this),
         });
         Main.panel.addToStatusArea('alpha-shell', this._indicator);
 
-        this._addKeybinding('toggle-overlay', this._toggleOverlay.bind(this));
-        this._addKeybinding('toggle-annotator', this._toggleAnnotator.bind(this));
+        this._addKeybinding('toggle-writer', this._toggleWriter.bind(this));
 
         console.log('[alpha-shell] enabled');
     }
@@ -47,7 +40,7 @@ export default class AlphaShellExtension extends Extension {
     }
 
     disable() {
-        for (const name of ['toggle-overlay', 'toggle-annotator']) {
+        for (const name of ['toggle-writer']) {
             try {
                 Main.wm.removeKeybinding(name);
             } catch (e) {
@@ -60,29 +53,18 @@ export default class AlphaShellExtension extends Extension {
             this._indicator = null;
         }
 
-        if (this.overlay) {
-            this.overlay.destroy();
-            this.overlay = null;
+        if (this.writer) {
+            this.writer.destroy();
+            this.writer = null;
         }
 
-        if (this.annotator) {
-            this.annotator.destroy();
-            this.annotator = null;
-        }
-
-        this.ai = null;
         this._settings = null;
 
         console.log('[alpha-shell] disabled');
     }
 
-    _toggleOverlay() {
-        if (this.overlay)
-            this.overlay.toggle();
-    }
-
-    _toggleAnnotator() {
-        if (this.annotator)
-            this.annotator.toggle();
+    _toggleWriter() {
+        if (this.writer)
+            this.writer.toggle();
     }
 }

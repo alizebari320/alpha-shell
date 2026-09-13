@@ -1,7 +1,7 @@
 {
   "name": "alpha-shell",
-  "version": "1.0.0",
-  "description": "ALPHA Shell — GNOME Shell extension with an AI overlay architecture (providers not wired)",
+  "version": "2.0.0",
+  "description": "ALPHA Shell — GNOME Shell extension featuring ALPHA Writer, a screen annotation and handwriting tool",
   "type": "module",
   "license": "MIT",
   "gnome": {

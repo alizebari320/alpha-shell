@@ -2,15 +2,10 @@
 <schemalist>
   <schema id="org.gnome.shell.extensions.alpha-shell"
           path="/org/gnome/shell/extensions/alpha-shell/">
-    <key name="toggle-overlay" type="as">
-      <default>["&lt;Control&gt;&lt;Alt&gt;a"]</default>
-      <summary>Toggle the ALPHA Shell AI overlay</summary>
-      <description>Keyboard shortcut that shows or hides the overlay.</description>
-    </key>
-    <key name="toggle-annotator" type="as">
+    <key name="toggle-writer" type="as">
       <default>["&lt;Control&gt;&lt;Alt&gt;d"]</default>
-      <summary>Toggle the Screen Annotator</summary>
-      <description>Keyboard shortcut that starts or quits the screen annotator tool.</description>
+      <summary>Toggle ALPHA Writer</summary>
+      <description>Keyboard shortcut that starts or quits the ALPHA Writer screen tool.</description>
     </key>
     <key name="provider" type="s">
       <default>''</default>

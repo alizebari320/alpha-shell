@@ -2,10 +2,9 @@
 //
 // Subclasses PanelMenu.Button, the standard GNOME Shell panel-button pattern.
 // Left click opens the popup menu (native behavior); the menu lists each
-// tool so the AI overlay and the Screen Annotator can both be launched from
-// the panel without relying on keybindings.
+// tool so ALPHA Writer can be launched from the panel without relying on
+// keybindings.
 
-import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 
@@ -20,13 +19,12 @@ const ICON_NAME = 'applications-science-symbolic';
 export const Indicator = GObject.registerClass({
     GTypeName: 'AlphaShellIndicator',
 }, class Indicator extends PanelMenu.Button {
-    _init({onToggleOverlay, onToggleAnnotator} = {}) {
+    _init({onToggleWriter} = {}) {
         super._init(0.0, 'ALPHA Shell', false);
 
         this.add_style_class_name('alpha-indicator');
 
-        this._onToggleOverlay = onToggleOverlay;
-        this._onToggleAnnotator = onToggleAnnotator;
+        this._onToggleWriter = onToggleWriter;
 
         // The visible icon in the top bar.
         this._icon = new St.Icon({
@@ -37,9 +35,7 @@ export const Indicator = GObject.registerClass({
 
         if (this.menu) {
             this.menu.addMenuItem(this._menuItem(
-                'AI Overlay', this._onToggleOverlay));
-            this.menu.addMenuItem(this._menuItem(
-                'Screen Annotator', this._onToggleAnnotator));
+                'ALPHA Writer', this._onToggleWriter));
         }
     }
 

@@ -98,17 +98,10 @@ class GeneralPage extends Adw.PreferencesPage {
         this.add(group);
 
         group.add(new ShortcutSetting(
-            _('Toggle overlay'),
-            _('Keyboard shortcut that shows or hides the AI overlay.'),
+            _('Toggle ALPHA Writer'),
+            _('Keyboard shortcut that starts or quits the ALPHA Writer screen tool.'),
             settings,
-            'toggle-overlay'
-        ));
-
-        group.add(new ShortcutSetting(
-            _('Toggle Screen Annotator'),
-            _('Keyboard shortcut that starts or quits the screen annotator tool.'),
-            settings,
-            'toggle-annotator'
+            'toggle-writer'
         ));
     }
 }

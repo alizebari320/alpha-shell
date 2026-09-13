@@ -1,8 +1,8 @@
-// Screen Annotator / Handwriting — Feature 1 of the ALPHA Shell toolset.
+// ALPHA Writer — a screen annotation & handwriting tool of the ALPHA Shell toolset.
 //
-// A fully self-contained drawing layer that lives independently from the AI
-// overlay: enable()/disable()/destroy() are the only lifecycle surface the
-// extension needs, and the annotator never touches the AIOverlay or its state.
+// A fully self-contained drawing layer: enable()/disable()/destroy() are
+// the only lifecycle surface the extension needs, and the writer never
+// touches other tools or their state.
 //
 // Architecture (performance & Wayland notes):
 //
@@ -51,7 +51,7 @@ const COLORS = [
 // Stroke width presets in logical pixels.
 const WIDTHS = [2, 4, 8, 16];
 
-export class Annotator {
+export class Writer {
     constructor() {
         this._active = false;
         this._destroyed = false;
@@ -111,15 +111,15 @@ export class Annotator {
 
             this._setDrawMode(true);
         } catch (e) {
-            // A half-built annotator must never be left behind: either the
+            // A half-built writer must never be left behind: either the
             // full tool is on screen or nothing is.
-            console.error(`[alpha-shell] annotator failed to enable: ${e.message}\n${e.stack}`);
+            console.error(`[alpha-shell] writer failed to enable: ${e.message}\n${e.stack}`);
             this._active = false;
             this._teardown();
             return;
         }
 
-        console.log('[alpha-shell] annotator enabled');
+        console.log('[alpha-shell] ALPHA Writer enabled');
     }
 
     /** Quit the tool: tears down actors, drops strokes, releases grabs. */
@@ -129,7 +129,7 @@ export class Annotator {
 
         this._active = false;
         this._teardown();
-        console.log('[alpha-shell] annotator disabled');
+        console.log('[alpha-shell] ALPHA Writer disabled');
     }
 
     /** Full teardown — safe to call multiple times. */
@@ -161,7 +161,7 @@ export class Annotator {
         this._committedCanvas = this._makeCanvas(
             a => this._onCommittedDraw(a));
         this._committedActor = this._committedCanvas;
-        this._committedActor.name = 'alphaAnnotatorCommitted';
+        this._committedActor.name = 'alphaWriterCommitted';
         this._committedActor.reactive = false;
         this._committedActor.set_position(m.x, m.y);
 
@@ -169,7 +169,7 @@ export class Annotator {
         this._liveCanvas = this._makeCanvas(
             a => this._onLiveDraw(a));
         this._liveActor = this._liveCanvas;
-        this._liveActor.name = 'alphaAnnotatorLive';
+        this._liveActor.name = 'alphaWriterLive';
         this._liveActor.reactive = true;
         this._liveActor.set_position(m.x, m.y);
 
@@ -207,19 +207,19 @@ export class Annotator {
         const m = this._monitor;
 
         this._toolbar = new St.BoxLayout({
-            name: 'alphaAnnotatorToolbar',
-            style_class: 'alpha-annotator-toolbar',
+            name: 'alphaWriterToolbar',
+            style_class: 'alpha-writer-toolbar',
             vertical: true,
             reactive: true, // stays interactive in pass-through mode
         });
 
         // --- Drag handle ------------------------------------------------
         const handle = new St.BoxLayout({
-            style_class: 'alpha-annotator-drag',
+            style_class: 'alpha-writer-drag',
             reactive: true,
         });
         handle.add_child(new St.Label({text: '⠿'}));
-        handle.add_child(new St.Label({text: 'Annotator'}));
+        handle.add_child(new St.Label({text: 'ALPHA Writer'}));
 
         this._track(handle, 'button-press-event',
             (a, e) => this._onHandlePress(e));
@@ -233,7 +233,7 @@ export class Annotator {
         // --- Mode toggle ------------------------------------------------
         this._modeButton = new St.Button({
             label: '✏️  Draw',
-            style_class: 'alpha-annotator-btn alpha-annotator-mode alpha-mode-draw',
+            style_class: 'alpha-writer-btn alpha-writer-mode alpha-mode-draw',
             x_expand: true,
         });
         this._track(this._modeButton, 'clicked',
@@ -244,10 +244,10 @@ export class Annotator {
         this._toolbar.add_child(
             this._sectionLabel('Color'));
 
-        const colorRow = new St.BoxLayout({style_class: 'alpha-annotator-row'});
+        const colorRow = new St.BoxLayout({style_class: 'alpha-writer-row'});
         this._colorButtons = COLORS.map((color, index) => {
             const chip = new St.Button({
-                style_class: 'alpha-annotator-chip',
+                style_class: 'alpha-writer-chip',
                 style: `background-color: ${color.css};`,
             });
             this._track(chip, 'clicked', () => {
@@ -266,11 +266,11 @@ export class Annotator {
         this._toolbar.add_child(
             this._sectionLabel('Stroke'));
 
-        const widthRow = new St.BoxLayout({style_class: 'alpha-annotator-row'});
+        const widthRow = new St.BoxLayout({style_class: 'alpha-writer-row'});
         this._widthButtons = WIDTHS.map((width, index) => {
             const btn = new St.Button({
                 label: String(width),
-                style_class: 'alpha-annotator-btn alpha-annotator-width-btn',
+                style_class: 'alpha-writer-btn alpha-writer-width-btn',
             });
             this._track(btn, 'clicked', () => {
                 this._width = width;
@@ -285,11 +285,11 @@ export class Annotator {
         this._toolbar.add_child(widthRow);
 
         // --- Clear / Close ------------------------------------------------
-        const actionRow = new St.BoxLayout({style_class: 'alpha-annotator-row'});
+        const actionRow = new St.BoxLayout({style_class: 'alpha-writer-row'});
 
         const clearBtn = new St.Button({
             label: '🗑  Clear',
-            style_class: 'alpha-annotator-btn alpha-annotator-clear',
+            style_class: 'alpha-writer-btn alpha-writer-clear',
             x_expand: true,
         });
         this._track(clearBtn, 'clicked', () => this.clear());
@@ -297,7 +297,7 @@ export class Annotator {
 
         const closeBtn = new St.Button({
             label: '✕',
-            style_class: 'alpha-annotator-btn alpha-annotator-close',
+            style_class: 'alpha-writer-btn alpha-writer-close',
         });
         this._track(closeBtn, 'clicked', () => this.disable());
         actionRow.add_child(closeBtn);
@@ -314,7 +314,7 @@ export class Annotator {
     _sectionLabel(text) {
         return new St.Label({
             text,
-            style_class: 'alpha-annotator-section',
+            style_class: 'alpha-writer-section',
         });
     }
 
@@ -551,7 +551,7 @@ export class Annotator {
         } catch (e) {
             // Without a grab we still receive events while the pointer is
             // over the (fullscreen) canvas; degrade gracefully.
-            console.warn(`[alpha-shell] annotator: stage grab failed: ${e.message}`);
+            console.warn(`[alpha-shell] writer: stage grab failed: ${e.message}`);
             return null;
         }
     }
