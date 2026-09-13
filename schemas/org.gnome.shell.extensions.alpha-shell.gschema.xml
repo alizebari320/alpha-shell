@@ -3,7 +3,7 @@
   <schema id="org.gnome.shell.extensions.alpha-shell"
           path="/org/gnome/shell/extensions/alpha-shell/">
     <key name="toggle-overlay" type="as">
-      <default><![CDATA[['<Super>space']]></default>
+      <default>["&lt;Super&gt;space"]</default>
       <summary>Toggle the ALPHA Shell AI overlay</summary>
       <description>Keyboard shortcut that shows or hides the overlay.</description>
     </key>

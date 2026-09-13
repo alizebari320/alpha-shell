@@ -5,6 +5,6 @@
   "version": "1.0",
   "shell-version": ["50"],
   "settings-schema": "org.gnome.shell.extensions.alpha-shell",
-  "url": "https://github.com/anomalyco/opencode",
+  "url": "https://github.com/alizebari320/alpha-shell",
   "gettext-domain": "alpha-shell"
 }
