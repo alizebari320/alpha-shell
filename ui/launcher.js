@@ -7,9 +7,10 @@
 // actor on the stage is input-blocked only while the HUD is up, and the
 // window beneath keeps its state exactly as it was.
 //
-// Search runs against Shell.AppSystem.get_default().get_installed() and
-// matches an app's name, description and id (case-insensitive). Results are
-// a vertical list of icon + name rows.
+// Search runs against Shell.AppSystem.get_default().get_installed() (which
+// returns Gio.AppInfo objects in GNOME 50) and matches an app's name,
+// description and id (case-insensitive). Results are a vertical list of
+// icon + name rows.
 //
 // Keyboard:
 //   Up / Down       move the selection
@@ -30,15 +31,16 @@
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
-import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import {ensureActorVisibleInScrollView} from 'resource:///org/gnome/shell/misc/animationUtils.js';
 
 const HUD_WIDTH = 640;
-const MAX_RESULTS = 8;      // rows shown before the list scrolls
-const ROW_HEIGHT = 48;      // per-result row height (px)
+const MAX_RESULTS = 12;     // rows rendered per search — every row is a live
+                            // icon texture; re-rendering 100 of them per
+                            // keystroke is what made typing feel frozen.
 
 export class Launcher {
     constructor() {
@@ -46,11 +48,12 @@ export class Launcher {
         this._destroyed = false;
 
         // State
-        this._apps = [];             // cached Shell.App list
+        this._apps = [];             // cached Gio.AppInfo list (GNOME 50)
         this._results = [];          // currently matching apps
         this._selected = -1;         // index into this._results (-1 = none)
 
         // Actors
+        this._overlay = null;       // fullscreen click-catcher + modal target
         this._hud = null;            // top-level St.BoxLayout (vertical)
         this._entry = null;          // St.Entry (search field)
         this._entryText = null;      // entry.clutter_text (key focus target)
@@ -83,7 +86,8 @@ export class Launcher {
         this._active = true;
 
         try {
-            this._apps = Shell.AppSystem.get_default().get_installed();
+            this._apps = Shell.AppSystem.get_default().get_installed()
+                .filter(app => app.should_show());
 
             this._buildHud();
             this._centerHud();
@@ -91,13 +95,24 @@ export class Launcher {
             this._track(Main.layoutManager, 'monitors-changed',
                 () => this._invalidateMonitor());
 
-            // Enter the modal grab BEFORE focusing the entry so that focus is
-            // fully established inside the modal region. pushModal() returns a
-            // Clutter.Grab which popModal() expects back on close — store it.
-            this._grab = Main.pushModal(this._hud);
-            this._entryText.grab_key_focus();
-
-            this._refresh('');   // start showing all apps
+            // Defer the modal grab by one idle cycle: the HUD must be mapped
+            // on the stage first, and if we were opened from the panel menu
+            // the menu is still releasing ITS grab this very frame. Pushing
+            // ours immediately makes the two grabs fight and freezes all
+            // input. (GNOME 50 removed Meta.later_add; idle_add replaces it.)
+            GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+                if (!this._active)
+                    return GLib.SOURCE_REMOVE;  // closed again before we grabbed
+                try {
+                    this._grab = Main.pushModal(this._overlay);
+                    this._entryText.grab_key_focus();
+                    this._refresh('');   // start showing all apps
+                } catch (e) {
+                    console.error(`[alpha-shell] launcher modal grab failed: ${e.message}`);
+                    this.disable();
+                }
+                return GLib.SOURCE_REMOVE; // run once
+            });
         } catch (e) {
             // A half-built HUD must never leak a modal grab onto the stage.
             console.error(`[alpha-shell] launcher failed to enable: ${e.message}\n${e.stack}`);
@@ -135,6 +150,31 @@ export class Launcher {
     // ------------------------------------------------------------------
 
     _buildHud() {
+        // Fullscreen transparent overlay: it is the modal grab target and the
+        // click-outside-to-dismiss catcher. The visible HUD is its child.
+        this._overlay = new St.Widget({
+            name: 'alphaLauncherOverlay',
+            style_class: 'alpha-launcher-overlay',
+            reactive: true,
+        });
+
+        this._track(this._overlay, 'button-press-event', (actor, event) => {
+            const [sx, sy] = event.get_coords();
+            const hud = this._hud;
+            if (hud) {
+                const pos = hud.get_transformed_position();
+                if (pos) {
+                    const [hx, hy] = pos;
+                    const w = hud.get_width();
+                    const h = hud.get_height();
+                    if (sx >= hx && sx <= hx + w && sy >= hy && sy <= hy + h)
+                        return Clutter.EVENT_PROPAGATE;  // inside HUD — its children handle it
+                }
+            }
+            this._defer(() => this.disable());
+            return Clutter.EVENT_STOP;
+        });
+
         this._hud = new St.BoxLayout({
             name: 'alphaLauncherHud',
             style_class: 'alpha-launcher-hud',
@@ -177,32 +217,54 @@ export class Launcher {
         this._scroll.set_child(this._list);
         this._hud.add_child(this._scroll);
 
+        // "No matches" hint. It stays a permanent (hidden) child of the
+        // list so it is always inside the HUD tree and destroyed with it.
         this._noResults = new St.Label({
             text: 'No matching applications',
             style_class: 'alpha-launcher-empty',
         });
+        this._noResults.hide();
+        this._list.add_child(this._noResults);
 
-        Main.layoutManager.uiGroup.add_child(this._hud);
+        Main.layoutManager.uiGroup.add_child(this._overlay);
+        this._overlay.add_child(this._hud);
     }
 
     // A single result row: icon + name. Selection is rendered via the
     // 'selected' style class; click and hover both drive selection/activation.
     _buildRow(app) {
+        // St.Button is a St.Bin — it can hold exactly ONE child. The icon and
+        // the label must go into a horizontal St.BoxLayout, which is then the
+        // button's single child. (Adding both directly made them stack in
+        // one spot — the "merged icon and name" glitch.)
         const row = new St.Button({
             style_class: 'alpha-launcher-row',
             reactive: true,
             track_hover: true,
             can_focus: false,
+            x_expand: true,
         });
 
-        const icon = app.create_icon_texture(32);
-        row.add_child(icon);
+        const box = new St.BoxLayout({
+            style_class: 'alpha-launcher-row-box',
+            x_expand: true,
+        });
 
-        const label = new St.Label({
+        // GNOME 50's get_installed() returns Gio.AppInfo, which exposes the
+        // icon via get_icon() (a GIcon) — render it through St.Icon.
+        const gicon = app.get_icon();
+        box.add_child(new St.Icon({
+            gicon: gicon ?? null,
+            fallback_icon_name: 'application-x-executable-symbolic',
+            icon_size: 32,
+        }));
+
+        box.add_child(new St.Label({
             text: app.get_name(),
             style_class: 'alpha-launcher-row-label',
-        });
-        row.add_child(label);
+        }));
+
+        row.set_child(box);
 
         const id = row.connect('clicked', () => {
             this._launch(app);
@@ -214,10 +276,26 @@ export class Launcher {
             return Clutter.EVENT_PROPAGATE;
         });
 
-        // Track per-row signal ids so they are disconnected on teardown.
-        this._handlers.push({obj: row, id}, {obj: row, id: hover});
+        // Per-row handlers live on the row itself, NOT in the global
+        // _handlers list: rows are recreated on every keystroke, so a global
+        // list would grow without bound. They are disconnected in
+        // _destroyRow() and during teardown.
+        row._alphaHandlerIds = [id, hover];
 
         return row;
+    }
+
+    /** Disconnect a result row's handlers and destroy it. */
+    _destroyRow(row) {
+        for (const id of row._alphaHandlerIds ?? []) {
+            try {
+                row.disconnect(id);
+            } catch (e) {
+                // Row already destroyed — fine.
+            }
+        }
+        row._alphaHandlerIds = [];
+        row.destroy();
     }
 
     // ------------------------------------------------------------------
@@ -237,7 +315,7 @@ export class Launcher {
         });
 
         // Cap the shown list for performance and sane scrolling.
-        this._results = this._results.slice(0, 200);
+        this._results = this._results.slice(0, MAX_RESULTS);
 
         this._renderRows();
     }
@@ -251,17 +329,13 @@ export class Launcher {
     }
 
     _renderRows() {
-        // Clear previous rows.
-        for (const row of this._rows) {
-            row.destroy();
-        }
+        // Clear previous rows (each disconnects its own handlers).
+        for (const row of this._rows)
+            this._destroyRow(row);
         this._rows = [];
-
-        this._list.remove_all_children();
 
         if (this._results.length === 0) {
             this._noResults.show();
-            this._list.add_child(this._noResults);
         } else {
             this._noResults.hide();
             for (const app of this._results) {
@@ -297,24 +371,27 @@ export class Launcher {
                 this._rows[i].remove_style_class_name('selected');
         }
 
-        // Keep the selected row scrolled into view.
-        if (this._selected >= 0 && this._selected < this._rows.length) {
-            const row = this._rows[this._selected];
-            this._scroll.scroll_to_actor(row);
-        }
+        // Keep the selected row scrolled into view. St.ScrollView has no
+        // scroll_to_actor() in GNOME 50 — the shell's own helper is the
+        // supported way.
+        if (this._selected >= 0 && this._selected < this._rows.length)
+            ensureActorVisibleInScrollView(this._scroll, this._rows[this._selected]);
     }
 
     _launch(app) {
         try {
-            app.activate();
+            // GNOME 50: AppSystem.get_installed() returns Gio.AppInfo objects
+            // (no activate()). Resolve the real Shell.App for proper
+            // focus/workspace behaviour; fall back to raw GIO launch.
+            const shellApp = Shell.AppSystem.get_default().lookup_app(app.get_id());
+            if (shellApp)
+                shellApp.activate();
+            else
+                app.launch([], null);
         } catch (e) {
             console.error(`[alpha-shell] launcher failed to activate '${app.get_id()}': ${e.message}`);
         }
         // Close regardless of activation success so the HUD never sticks.
-        // Deferred: _launch() runs inside a row's 'clicked' emission (or the
-        // entry's key-press); destroying that row / the HUD synchronously
-        // leaves St touching freed memory after the handler returns and
-        // SIGSEGVs gnome-shell, killing the whole Wayland session.
         this._defer(() => this.disable());
     }
 
@@ -360,18 +437,24 @@ export class Launcher {
     // ------------------------------------------------------------------
 
     _centerHud() {
-        if (!this._hud)
+        if (!this._overlay || !this._hud)
             return;
 
         const m = Main.layoutManager.primaryMonitor;
+
+        // Overlay covers the whole monitor; the HUD is positioned relative
+        // to it (its local origin is the monitor's top-left).
+        this._overlay.set_position(m.x, m.y);
+        this._overlay.set_size(m.width, m.height);
+
         const width = Math.min(HUD_WIDTH, Math.floor(m.width * 0.9));
         this._hud.set_width(width);
 
-        // Position: horizontally centered, vertically near the top third.
-        const x = m.x + Math.floor((m.width - width) / 2);
-        const y = m.y + Math.floor(m.height * 0.18);
+        // Horizontally centered, vertically near the top third.
+        this._hud.set_position(
+            Math.floor((m.width - width) / 2),
+            Math.floor(m.height * 0.18));
 
-        this._hud.set_position(x, y);
         this._monitorInvalidated = false;
     }
 
@@ -399,15 +482,16 @@ export class Launcher {
         this._handlers.push({object, id});
     }
 
-    /** Run fn outside any ongoing signal emission — see _launch(). */
+    /** Run fn outside any ongoing signal emission — see _launch().
+     *  (GNOME 50 removed Meta.later_add; idle_add replaces it.) */
     _defer(fn) {
-        Meta.later_add(Meta.LaterType.BEFORE_REDRAW, () => {
+        GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
             try {
                 fn();
             } catch (e) {
                 console.error(`[alpha-shell] deferred op failed: ${e.message}`);
             }
-            return false; // run once
+            return GLib.SOURCE_REMOVE; // run once
         });
     }
 
@@ -433,6 +517,24 @@ export class Launcher {
         }
         this._handlers = [];
 
+        // Live result rows are not in _handlers (see _buildRow) — release
+        // them here too, before the HUD tree is destroyed.
+        for (const row of this._rows) {
+            for (const id of row._alphaHandlerIds ?? []) {
+                try {
+                    row.disconnect(id);
+                } catch (e) {
+                    // Row already destroyed — fine.
+                }
+            }
+            row._alphaHandlerIds = [];
+        }
+        this._rows = [];
+
+        // Drop key focus explicitly so nothing references the actors we are
+        // about to destroy.
+        global.stage.set_key_focus(null);
+
         this._results = [];
         this._apps = [];
         this._selected = -1;
@@ -440,6 +542,10 @@ export class Launcher {
         if (this._hud) {
             this._hud.destroy();
             this._hud = null;
+        }
+        if (this._overlay) {
+            this._overlay.destroy();
+            this._overlay = null;
         }
         this._rows = [];
         this._entry = null;

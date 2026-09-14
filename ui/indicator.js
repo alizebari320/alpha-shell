@@ -19,12 +19,13 @@ const ICON_NAME = 'applications-science-symbolic';
 export const Indicator = GObject.registerClass({
     GTypeName: 'AlphaShellIndicator',
 }, class Indicator extends PanelMenu.Button {
-    _init({onToggleWriter} = {}) {
+    _init({onToggleWriter, onToggleLauncher} = {}) {
         super._init(0.0, 'ALPHA Shell', false);
 
         this.add_style_class_name('alpha-indicator');
 
         this._onToggleWriter = onToggleWriter;
+        this._onToggleLauncher = onToggleLauncher;
 
         // The visible icon in the top bar.
         this._icon = new St.Icon({
@@ -36,6 +37,8 @@ export const Indicator = GObject.registerClass({
         if (this.menu) {
             this.menu.addMenuItem(this._menuItem(
                 'ALPHA Writer', this._onToggleWriter));
+            this.menu.addMenuItem(this._menuItem(
+                'ALPHA Quick Launcher', this._onToggleLauncher));
         }
     }
 

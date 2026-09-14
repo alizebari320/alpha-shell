@@ -1,8 +1,25 @@
 # ALPHA Shell
 
-A GNOME Shell extension (Fedora 44 / GNOME Shell 50, ESM, Wayland) whose
-current flagship tool is **ALPHA Writer** — a screen annotation and
-handwriting layer that floats above your desktop.
+A GNOME Shell extension (Fedora 44 / GNOME Shell 50, ESM, Wayland) featuring:
+
+- **ALPHA Writer** — a screen annotation and handwriting layer that floats
+  above your desktop.
+- **ALPHA Quick Launcher** — an in-place Spotlight-style search HUD.
+
+## ALPHA Quick Launcher
+
+Toggle it with `Super+a` or from the ALPHA Shell panel icon menu. A centered
+search HUD appears over the current windows — the active application is
+neither minimized nor sent behind the Overview.
+
+- Type to search all installed applications (name, description, or app id,
+  case-insensitive) via `Shell.AppSystem.get_default().get_installed()`.
+- `Up` / `Down` move the selection, `Enter` / `KP_Enter` launch the selected
+  app, `Escape` dismisses the HUD.
+- Clicking a result launches it; hovering moves the selection.
+- Because GNOME binds `Super+a` to the app grid by default
+  (`toggle-application-view`), the extension clears that binding while it is
+  enabled and restores the previous value on disable.
 
 ## ALPHA Writer
 
@@ -46,6 +63,8 @@ your apps.
   `St.DrawingArea` is its supported replacement.)
 - `ui/writer.js` — the `Writer` class, fully self-contained:
   `enable()` / `disable()` / `destroy()` are the whole lifecycle surface.
+- `ui/launcher.js` — the `Launcher` class (same self-contained lifecycle
+  pattern as Writer) powering the Quick Launcher HUD.
 - `ui/indicator.js` — panel button + tool menu.
 - `extension.js` — entry point: wires the indicator and keybinding.
 - `ai/` — provider/model architecture kept for future AI features
@@ -121,9 +140,10 @@ alpha-shell/
 │   ├── models.js           # provider + model catalog (placeholders)
 │   ├── providers.js        # AIProvider base class + registry
 │   └── safety.js           # command approval / safe-execution workflow
-└── ui/
-    ├── writer.js           # ALPHA Writer (screen annotation)
-    └── indicator.js        # panel indicator + tool menu
+├── ui/
+│   ├── writer.js           # ALPHA Writer (screen annotation)
+│   ├── launcher.js         # ALPHA Quick Launcher (search HUD)
+│   └── indicator.js        # panel indicator + tool menu
 ```
 
 ## Known limitations

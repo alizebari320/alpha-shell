@@ -47,7 +47,7 @@
 //    locally for the transient text entry) and disconnected on teardown.
 
 import Clutter from 'gi://Clutter';
-import Meta from 'gi://Meta';
+import GLib from 'gi://GLib';
 import St from 'gi://St';
 import Cairo from 'gi://cairo';
 
@@ -1089,15 +1089,16 @@ export class Writer {
      *  inside their own 'clicked' / 'key-press' / 'activate' handlers leaves
      *  St/Clutter touching freed memory afterwards (pseudo-class updates,
      *  accessibility objects) and SIGSEGVs gnome-shell. Scheduling the work
-     *  for just before the next redraw is the shell-idiomatic fix. */
+     *  on the next idle cycle achieves the same without running inside the
+     *  emission. (GNOME 50 removed Meta.later_add / Meta.Later entirely.) */
     _defer(fn) {
-        Meta.later_add(Meta.LaterType.BEFORE_REDRAW, () => {
+        GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
             try {
                 fn();
             } catch (e) {
                 console.error(`[alpha-shell] deferred op failed: ${e.message}`);
             }
-            return false; // run once
+            return GLib.SOURCE_REMOVE; // run once
         });
     }
 
