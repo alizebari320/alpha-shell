@@ -32,7 +32,7 @@ export class AlphaOverlay {
      * @param {string} [opts.hint]     right-aligned header hint
      * @param {string} [opts.footer]   keycap hint strip
      * @param {number} [opts.width]    panel width in px
-     * @param {boolean} [opts.dim]     dim + capture clicks behind the panel
+     * @param {boolean} [opts.dim]     dim the background behind the panel
      * @param {boolean} [opts.chrome]  render the shared header/footer
      * @param {string} [opts.styleClass] extra class on the panel
      */
@@ -128,9 +128,11 @@ export class AlphaOverlay {
         this._connect(this._overlay, 'key-press-event', (_a, event) =>
             this._handleKeyPress(event));
 
-        // Click outside the panel dismisses. The check keeps clicks inside
-        // the panel from bubbling up as a dismiss.
+        // Click outside the panel dismisses; clicks inside are left alone.
         this._connect(this._overlay, 'button-press-event', (_a, event) => {
+            if (!this._panel)
+                return Clutter.EVENT_PROPAGATE;
+
             const [x, y] = event.get_coords();
             const [px, py] = this._panel.get_transformed_position();
             const [pw, ph] = this._panel.get_transformed_size();
@@ -248,22 +250,19 @@ export class AlphaOverlay {
             GLib.source_remove(id);
     }
 
-    /** Center the overlay on the monitor holding the pointer. */
+    /** Center the overlay on the monitor that currently holds the pointer. */
     _layout() {
         if (!this._overlay)
             return;
 
         const [px, py] = global.get_pointer();
-        const index = global.display.get_monitor_index_for_rect(
-            new (imports?.gi?.Meta?.Rectangle ?? Object)() instanceof Object &&
-            false ? null : new Clutter.Rect() ?? null) ?? -1;
+        const monitors = Main.layoutManager.monitors ?? [];
 
-        // Resolve the monitor by pointer position without relying on a
-        // Meta.Rectangle constructor that moved between shell versions.
-        const monitors = Main.layoutManager.monitors;
         let monitor = Main.layoutManager.primaryMonitor;
         for (const m of monitors) {
-            if (px >= m.x && px < m.x + m.width && py >= m.y && py < m.y + m.height) {
+            const inside = px >= m.x && px < m.x + m.width &&
+                py >= m.y && py < m.y + m.height;
+            if (inside) {
                 monitor = m;
                 break;
             }
@@ -271,7 +270,6 @@ export class AlphaOverlay {
         if (!monitor)
             return;
 
-        void index;
         this._overlay.set_position(monitor.x, monitor.y);
         this._overlay.set_size(monitor.width, monitor.height);
     }
