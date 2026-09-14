@@ -22,7 +22,7 @@
  *   spacing          4px grid, 12px panel padding, 8px row gap
  *
  * Feature-specific classes may override GEOMETRY only — never color,
- * radius or typography. That rule is what keeps nine features looking
+ * radius or typography. That rule is what keeps eleven features looking
  * like one extension.
  */
 
@@ -250,7 +250,7 @@
     padding: 4px 2px;
 }
 
-/* Small floating control bar (recorder, zoom) — not a centered HUD. */
+/* Small floating control bar (recorder, zoom, focus) — not a centered HUD. */
 .alpha-pill {
     background-color: rgba(16, 16, 20, 0.92);
     border: 1px solid rgba(255, 255, 255, 0.10);
@@ -275,6 +275,94 @@
     color: #ff4757;
     font-weight: bold;
     font-size: 13px;
+}
+
+/* ===========================================================================
+ * FEATURE GEOMETRY
+ * Sizing only. Colors, radii and type come from the shared tokens above.
+ * ======================================================================== */
+
+/* ALPHA Ask (ui/ask.js) */
+.alpha-ask .alpha-scroll {
+    min-height: 120px;
+    max-height: 380px;
+}
+
+/* Clipboard History (ui/clipboard.js) */
+.alpha-clipboard .alpha-scroll {
+    min-height: 200px;
+    max-height: 420px;
+}
+
+/* Clipboard AI (ui/clipboardAi.js) */
+.alpha-clipboard-ai .alpha-body-mono {
+    max-height: 120px;
+}
+
+.alpha-clipboard-ai .alpha-scroll {
+    min-height: 100px;
+    max-height: 320px;
+}
+
+/* Terminal Assist (ui/terminal.js) */
+.alpha-terminal .alpha-body-mono {
+    min-height: 24px;
+}
+
+/* Snip & Explain (ui/snip.js) */
+.alpha-snip-overlay {
+    background-color: rgba(0, 0, 0, 0.35);
+}
+
+.alpha-snip-band {
+    background-color: rgba(255, 122, 24, 0.18);
+    border: 2px solid #ff7a18;
+    border-radius: 4px;
+}
+
+.alpha-snip-hint {
+    background-color: rgba(16, 16, 20, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 999px;
+    padding: 6px 14px;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 12px;
+}
+
+.alpha-snip .alpha-scroll {
+    min-height: 100px;
+    max-height: 380px;
+}
+
+/* Zoom & Spotlight (ui/zoom.js) — the four rectangles framing the highlight */
+.alpha-dim {
+    background-color: rgba(0, 0, 0, 0.55);
+}
+
+.alpha-zoom {
+    margin-bottom: 48px;
+}
+
+/* Panel Stats (ui/stats.js) */
+.alpha-stats-button {
+    spacing: 6px;
+}
+
+.alpha-stats-summary {
+    color: #ffffff;
+    font-size: 13px;
+    font-feature-settings: "tnum";
+}
+
+.alpha-stats-name {
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 13px;
+}
+
+.alpha-stats-value {
+    color: #ffffff;
+    font-size: 13px;
+    font-feature-settings: "tnum";
 }
 
 /* ===========================================================================
@@ -472,7 +560,6 @@
 .alpha-launcher-row-box {
     spacing: 12px;
     min-height: 32px;
-    y-align: center;
 }
 
 .alpha-launcher-row:hover {
