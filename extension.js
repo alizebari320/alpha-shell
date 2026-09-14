@@ -6,11 +6,13 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {Writer} from './ui/writer.js';
 import {Indicator} from './ui/indicator.js';
+import {Launcher} from './ui/launcher.js';
 
 export default class AlphaShellExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
         this.writer = new Writer();
+        this.launcher = new Launcher();
 
         this._indicator = new Indicator({
             onToggleWriter: this._toggleWriter.bind(this),
@@ -18,18 +20,20 @@ export default class AlphaShellExtension extends Extension {
         Main.panel.addToStatusArea('alpha-shell', this._indicator);
 
         this._addKeybinding('toggle-writer', this._toggleWriter.bind(this));
+        this._addKeybinding('toggle-launcher',
+            this._toggleLauncher.bind(this), Meta.KeyBindingFlags.IGNORE_AUTOREPEAT);
 
         console.log('[alpha-shell] enabled');
     }
 
     /** Register a shortcut without ever crashing enable() — a missing or
      *  stale schema key must not take the whole extension down. */
-    _addKeybinding(name, handler) {
+    _addKeybinding(name, handler, flags = Meta.KeyBindingFlags.NONE) {
         try {
             Main.wm.addKeybinding(
                 name,
                 this._settings,
-                Meta.KeyBindingFlags.NONE,
+                flags,
                 Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW,
                 handler
             );
@@ -40,7 +44,7 @@ export default class AlphaShellExtension extends Extension {
     }
 
     disable() {
-        for (const name of ['toggle-writer']) {
+        for (const name of ['toggle-writer', 'toggle-launcher']) {
             try {
                 Main.wm.removeKeybinding(name);
             } catch (e) {
@@ -58,6 +62,11 @@ export default class AlphaShellExtension extends Extension {
             this.writer = null;
         }
 
+        if (this.launcher) {
+            this.launcher.destroy();
+            this.launcher = null;
+        }
+
         this._settings = null;
 
         console.log('[alpha-shell] disabled');
@@ -66,5 +75,10 @@ export default class AlphaShellExtension extends Extension {
     _toggleWriter() {
         if (this.writer)
             this.writer.toggle();
+    }
+
+    _toggleLauncher() {
+        if (this.launcher)
+            this.launcher.toggle();
     }
 }

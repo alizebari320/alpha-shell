@@ -47,6 +47,7 @@
 //    locally for the transient text entry) and disconnected on teardown.
 
 import Clutter from 'gi://Clutter';
+import Meta from 'gi://Meta';
 import St from 'gi://St';
 import Cairo from 'gi://cairo';
 
@@ -397,7 +398,14 @@ export class Writer {
             label: '✕',
             style_class: 'alpha-writer-btn alpha-writer-close',
         });
-        this._track(closeBtn, 'clicked', () => this.disable());
+        // NEVER tear down actors from inside a 'clicked' emission: St.Button
+        // continues to touch itself (pseudo classes, accessible objects)
+        // after the handler returns, and destroying it mid-emission caused
+        // gnome-shell SIGSEGVs in st_widget_update_child_styles /
+        // clutter_actor_get_accessible (=> the whole Wayland session died and
+        // the machine "restarted" back to the GDM login screen).
+        this._track(closeBtn, 'clicked',
+            () => this._defer(() => this.disable()));
         actionRow.add_child(closeBtn);
 
         this._toolbar.add_child(actionRow);
@@ -667,7 +675,9 @@ export class Writer {
             if (this._textEntry)
                 this._cancelText();
             else
-                this.disable();
+                // Deferred: destroying the key-focus actor from inside its
+                // own key-press emission crashes the shell (see _defer).
+                this._defer(() => this.disable());
             return Clutter.EVENT_STOP;
         }
 
@@ -823,7 +833,9 @@ export class Writer {
     }
 
     /** Tear down the entry (no commit) and hand key focus back to the
-     *  canvas so shortcuts keep working. */
+     *  canvas so shortcuts keep working. The entry itself is destroyed
+     *  deferred — this runs inside the entry's 'activate' / 'key-press'
+     *  emissions, and destroying it synchronously crashed the shell. */
     _destroyTextEntry() {
         const rec = this._textEntry;
         if (!rec)
@@ -837,11 +849,13 @@ export class Writer {
                 // Object already destroyed — fine.
             }
         }
-        try {
-            rec.entry.destroy();
-        } catch (e) {
-            // Already destroyed — fine.
-        }
+        this._defer(() => {
+            try {
+                rec.entry.destroy();
+            } catch (e) {
+                // Already destroyed (e.g. session teardown won the race) — fine.
+            }
+        });
 
         if (this._active && this._drawMode && this._liveActor)
             global.stage.set_key_focus(this._liveActor);
@@ -1070,6 +1084,22 @@ export class Writer {
     // ------------------------------------------------------------------
     // Grabs, relayout, teardown
     // ------------------------------------------------------------------
+
+    /** Run fn outside any ongoing signal emission. Destroying actors from
+     *  inside their own 'clicked' / 'key-press' / 'activate' handlers leaves
+     *  St/Clutter touching freed memory afterwards (pseudo-class updates,
+     *  accessibility objects) and SIGSEGVs gnome-shell. Scheduling the work
+     *  for just before the next redraw is the shell-idiomatic fix. */
+    _defer(fn) {
+        Meta.later_add(Meta.LaterType.BEFORE_REDRAW, () => {
+            try {
+                fn();
+            } catch (e) {
+                console.error(`[alpha-shell] deferred op failed: ${e.message}`);
+            }
+            return false; // run once
+        });
+    }
 
     _beginGrab(actor) {
         try {

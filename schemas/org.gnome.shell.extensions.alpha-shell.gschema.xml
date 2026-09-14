@@ -7,6 +7,11 @@
       <summary>Toggle ALPHA Writer</summary>
       <description>Keyboard shortcut that starts or quits the ALPHA Writer screen tool.</description>
     </key>
+    <key name="toggle-launcher" type="as">
+      <default>["&lt;Super&gt;a"]</default>
+      <summary>Toggle ALPHA Quick Launcher</summary>
+      <description>Keyboard shortcut that opens or dismisses the ALPHA Quick Launcher search HUD.</description>
+    </key>
     <key name="provider" type="s">
       <default>''</default>
       <summary>Active AI provider id</summary>

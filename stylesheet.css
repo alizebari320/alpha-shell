@@ -143,3 +143,70 @@
     background-color: rgba(255, 71, 87, 0.4);
     border-color: rgba(255, 71, 87, 0.8);
 }
+
+/* ---- ALPHA Quick Launcher (ui/launcher.js) ---- */
+
+.alpha-launcher-hud {
+    background-color: #1e1e24;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 16px;
+    padding: 12px;
+    spacing: 12px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+
+.alpha-launcher-entry {
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 2px solid rgba(43, 255, 136, 0.45);
+    border-radius: 10px;
+    padding: 10px 14px;
+    color: #ffffff;
+    font-size: 16px;
+    caret-color: #2bff88;
+}
+
+.alpha-launcher-entry:focus {
+    border-color: #2bff88;
+    box-shadow: 0 0 0 1px rgba(43, 255, 136, 0.5);
+}
+
+.alpha-launcher-scroll {
+    min-height: 240px;
+    max-height: 420px;
+}
+
+.alpha-launcher-list {
+    spacing: 4px;
+    padding-right: 4px;
+}
+
+.alpha-launcher-row {
+    background-color: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 6px 10px;
+    spacing: 12px;
+    min-height: 44px;
+    color: #ffffff;
+}
+
+.alpha-launcher-row:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.alpha-launcher-row.selected {
+    background-color: rgba(43, 255, 136, 0.18);
+    border-color: rgba(43, 255, 136, 0.55);
+    color: #2bff88;
+}
+
+.alpha-launcher-row-label {
+    font-weight: bold;
+    font-size: 15px;
+}
+
+.alpha-launcher-empty {
+    color: rgba(255, 255, 255, 0.45);
+    padding: 20px;
+    font-size: 14px;
+}
