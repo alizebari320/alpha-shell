@@ -50,7 +50,6 @@ export class ClipboardAiHud extends AlphaOverlay {
     _build(panel) {
         panel.add_child(new St.Label({style_class: 'alpha-section', text: 'CLIPBOARD'}));
 
-        this._source Preview = null; // placeholder removed below
         this._sourceLabel = new St.Label({
             style_class: 'alpha-body-mono',
             text: 'Reading clipboard\u2026',
