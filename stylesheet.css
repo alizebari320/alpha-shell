@@ -2,29 +2,388 @@
  *
  * GNOME Shell 45+ auto-loads a stylesheet named `stylesheet.css` from the
  * extension directory root, so this file is picked up (and unloaded) for us.
+ *
+ * ---------------------------------------------------------------------------
+ * DESIGN TOKENS — Alpha7 black/orange
+ * ---------------------------------------------------------------------------
+ * GNOME Shell CSS has no custom properties, so these values are inlined
+ * everywhere below. Copy them verbatim; never invent a new shade.
+ *
+ *   surface          rgba(16, 16, 20, 0.92)
+ *   surface raised   rgba(255, 255, 255, 0.06)
+ *   hairline         1px solid rgba(255, 255, 255, 0.10)
+ *   ACCENT           #ff7a18
+ *   accent wash      rgba(255, 122, 24, 0.18)
+ *   accent edge      rgba(255, 122, 24, 0.55)
+ *   danger           #ff4757
+ *   text             #ffffff / rgba(255, 255, 255, 0.55)
+ *   radius           16px panel / 10px control / 999px chip
+ *   shadow           0 12px 40px rgba(0, 0, 0, 0.55)
+ *   spacing          4px grid, 12px panel padding, 8px row gap
+ *
+ * Feature-specific classes may override GEOMETRY only — never color,
+ * radius or typography. That rule is what keeps eleven features looking
+ * like one extension.
  */
 
 .alpha-indicator {
     padding: 0 6px;
 }
 
-/* ---- ALPHA Writer (ui/writer.js) ---- */
+.alpha-panel-logo {
+    icon-size: 16px;
+}
+
+/* ===========================================================================
+ * SHARED CHROME (ui/shell.js + ui/brand.js)
+ * Used by every ALPHA feature HUD.
+ * ======================================================================== */
+
+.alpha-overlay {
+    background-color: rgba(0, 0, 0, 0.22);
+}
+
+.alpha-panel {
+    background-color: rgba(16, 16, 20, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 16px;
+    padding: 12px;
+    spacing: 12px;
+    color: #ffffff;
+    font-size: 14px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+
+/* Branded header: logo | title | hint, closed by a hairline rule. */
+.alpha-header {
+    spacing: 10px;
+    padding: 2px 2px 10px 2px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+.alpha-logo {
+    icon-size: 18px;
+}
+
+/* Fallback until media/alpha-logo.svg is added. */
+.alpha-wordmark {
+    color: #ff7a18;
+    font-size: 13px;
+    font-weight: bold;
+    letter-spacing: 1.5px;
+}
+
+.alpha-header-title {
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: bold;
+}
+
+.alpha-header-hint {
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 12px;
+}
+
+/* Footer keycap strip. */
+.alpha-hint {
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 11px;
+    padding: 8px 2px 0 2px;
+    border-top: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+/* Section label above a control cluster. */
+.alpha-section {
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 11px;
+    font-weight: bold;
+    padding-left: 2px;
+}
+
+/* Text input. */
+.alpha-entry {
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 2px solid rgba(255, 122, 24, 0.45);
+    border-radius: 10px;
+    padding: 10px 14px;
+    color: #ffffff;
+    font-size: 16px;
+    caret-color: #ff7a18;
+}
+
+.alpha-entry:focus {
+    border-color: #ff7a18;
+    box-shadow: 0 0 0 1px rgba(255, 122, 24, 0.50);
+}
+
+/* Scrolling result list. */
+.alpha-scroll {
+    max-height: 420px;
+}
+
+.alpha-list {
+    spacing: 4px;
+    padding-right: 4px;
+}
+
+.alpha-row {
+    background-color: transparent;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    padding: 6px 10px;
+    min-height: 44px;
+    color: #ffffff;
+}
+
+.alpha-row-box {
+    spacing: 12px;
+    min-height: 32px;
+}
+
+.alpha-row:hover {
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
+/* Exactly one accent selection state, everywhere. */
+.alpha-row.selected {
+    background-color: rgba(255, 122, 24, 0.18);
+    border-color: rgba(255, 122, 24, 0.55);
+    color: #ff7a18;
+}
+
+.alpha-row-label {
+    font-size: 15px;
+    font-weight: bold;
+}
+
+.alpha-row-sub {
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 12px;
+}
+
+.alpha-row-pin {
+    color: #ff7a18;
+    font-size: 12px;
+}
+
+.alpha-empty {
+    color: rgba(255, 255, 255, 0.45);
+    padding: 20px;
+    font-size: 14px;
+}
+
+/* Buttons. */
+.alpha-btn {
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 10px;
+    padding: 6px 12px;
+    color: #ffffff;
+    font-weight: bold;
+    min-height: 18px;
+}
+
+.alpha-btn:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+.alpha-btn.selected,
+.alpha-btn:active {
+    background-color: rgba(255, 122, 24, 0.18);
+    border-color: rgba(255, 122, 24, 0.55);
+    color: #ff7a18;
+}
+
+.alpha-btn-danger:hover {
+    background-color: rgba(255, 71, 87, 0.25);
+    border-color: rgba(255, 71, 87, 0.60);
+    color: #ff4757;
+}
+
+.alpha-row-btns {
+    spacing: 8px;
+    padding-top: 2px;
+}
+
+/* Pill-shaped chip / small toggle. */
+.alpha-chip {
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 999px;
+    padding: 4px 12px;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 12px;
+}
+
+.alpha-chip.selected {
+    background-color: rgba(255, 122, 24, 0.18);
+    border-color: rgba(255, 122, 24, 0.55);
+    color: #ff7a18;
+}
+
+/* Answer / output body text. */
+.alpha-body {
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 14px;
+    padding: 4px 2px;
+}
+
+.alpha-body-mono {
+    font-family: monospace;
+    font-size: 13px;
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 10px;
+    padding: 10px 12px;
+}
+
+.alpha-body-error {
+    color: #ff4757;
+    font-size: 13px;
+    padding: 4px 2px;
+}
+
+.alpha-spinner {
+    color: #ff7a18;
+    font-size: 13px;
+    padding: 4px 2px;
+}
+
+/* Small floating control bar (recorder, zoom, focus) — not a centered HUD. */
+.alpha-pill {
+    background-color: rgba(16, 16, 20, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 999px;
+    padding: 6px 12px;
+    spacing: 10px;
+    color: #ffffff;
+    font-size: 13px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+
+.alpha-pill-logo {
+    icon-size: 16px;
+}
+
+.alpha-pill-label {
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 12px;
+}
+
+.alpha-pill-live {
+    color: #ff4757;
+    font-weight: bold;
+    font-size: 13px;
+}
+
+/* ===========================================================================
+ * FEATURE GEOMETRY
+ * Sizing only. Colors, radii and type come from the shared tokens above.
+ * ======================================================================== */
+
+/* ALPHA Ask (ui/ask.js) */
+.alpha-ask .alpha-scroll {
+    min-height: 120px;
+    max-height: 380px;
+}
+
+/* Clipboard History (ui/clipboard.js) */
+.alpha-clipboard .alpha-scroll {
+    min-height: 200px;
+    max-height: 420px;
+}
+
+/* Clipboard AI (ui/clipboardAi.js) */
+.alpha-clipboard-ai .alpha-body-mono {
+    max-height: 120px;
+}
+
+.alpha-clipboard-ai .alpha-scroll {
+    min-height: 100px;
+    max-height: 320px;
+}
+
+/* Terminal Assist (ui/terminal.js) */
+.alpha-terminal .alpha-body-mono {
+    min-height: 24px;
+}
+
+/* Snip & Explain (ui/snip.js) */
+.alpha-snip-overlay {
+    background-color: rgba(0, 0, 0, 0.35);
+}
+
+.alpha-snip-band {
+    background-color: rgba(255, 122, 24, 0.18);
+    border: 2px solid #ff7a18;
+    border-radius: 4px;
+}
+
+.alpha-snip-hint {
+    background-color: rgba(16, 16, 20, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 999px;
+    padding: 6px 14px;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 12px;
+}
+
+.alpha-snip .alpha-scroll {
+    min-height: 100px;
+    max-height: 380px;
+}
+
+/* Zoom & Spotlight (ui/zoom.js) — the four rectangles framing the highlight */
+.alpha-dim {
+    background-color: rgba(0, 0, 0, 0.55);
+}
+
+.alpha-zoom {
+    margin-bottom: 48px;
+}
+
+/* Panel Stats (ui/stats.js) */
+.alpha-stats-button {
+    spacing: 6px;
+}
+
+.alpha-stats-summary {
+    color: #ffffff;
+    font-size: 13px;
+    font-feature-settings: "tnum";
+}
+
+.alpha-stats-name {
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 13px;
+}
+
+.alpha-stats-value {
+    color: #ffffff;
+    font-size: 13px;
+    font-feature-settings: "tnum";
+}
+
+/* ===========================================================================
+ * ALPHA Writer (ui/writer.js)
+ * ======================================================================== */
 
 .alpha-writer-toolbar {
-    background-color: rgba(18, 18, 26, 0.94);
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    border-radius: 14px;
+    background-color: rgba(16, 16, 20, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 16px;
     padding: 10px 12px 12px 12px;
     spacing: 10px;
     color: #ffffff;
     font-size: 13px;
-    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
 }
 
 .alpha-writer-drag {
     spacing: 8px;
     padding: 2px 4px 8px 4px;
-    color: rgba(255, 255, 255, 0.6);
+    color: rgba(255, 255, 255, 0.55);
     font-weight: bold;
 }
 
@@ -44,9 +403,9 @@
 }
 
 .alpha-writer-btn {
-    background-color: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 8px;
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 10px;
     padding: 6px 10px;
     color: #ffffff;
     font-weight: bold;
@@ -54,23 +413,25 @@
 }
 
 .alpha-writer-btn:hover {
-    background-color: rgba(255, 255, 255, 0.18);
+    background-color: rgba(255, 255, 255, 0.12);
 }
 
 /* Mode toggle states */
 .alpha-writer-mode.alpha-mode-draw {
-    background-color: rgba(43, 255, 136, 0.16);
-    border-color: rgba(43, 255, 136, 0.55);
-    color: #2bff88;
+    background-color: rgba(255, 122, 24, 0.18);
+    border-color: rgba(255, 122, 24, 0.55);
+    color: #ff7a18;
 }
 
 .alpha-writer-mode.alpha-mode-pass {
-    background-color: rgba(255, 196, 84, 0.14);
-    border-color: rgba(255, 196, 84, 0.5);
-    color: #ffc454;
+    background-color: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.10);
+    color: rgba(255, 255, 255, 0.55);
 }
 
-/* Color chips — background-color comes from inline style, the frame from here */
+/* Color chips — background-color comes from inline style (the ink color
+ * presets are drawing colors, deliberately NOT part of the UI palette);
+ * the frame comes from here. */
 .alpha-writer-chip {
     width: 24px;
     height: 24px;
@@ -78,12 +439,12 @@
     min-height: 24px;
     padding: 0;
     border: 2px solid rgba(255, 255, 255, 0.22);
-    border-radius: 14px;
+    border-radius: 999px;
 }
 
 .alpha-writer-chip.selected {
-    border-color: #ffffff;
-    box-shadow: 0 0 8px rgba(255, 255, 255, 0.55);
+    border-color: #ff7a18;
+    box-shadow: 0 0 8px rgba(255, 122, 24, 0.55);
 }
 
 /* Stroke width buttons */
@@ -95,9 +456,9 @@
 }
 
 .alpha-writer-width-btn.selected {
-    background-color: rgba(43, 255, 136, 0.22);
-    border-color: rgba(43, 255, 136, 0.6);
-    color: #2bff88;
+    background-color: rgba(255, 122, 24, 0.18);
+    border-color: rgba(255, 122, 24, 0.55);
+    color: #ff7a18;
 }
 
 /* Tool buttons (pen / highlighter / eraser / shapes / text) */
@@ -110,9 +471,9 @@
 }
 
 .alpha-writer-tool-btn.selected {
-    background-color: rgba(43, 255, 136, 0.22);
-    border-color: rgba(43, 255, 136, 0.6);
-    color: #2bff88;
+    background-color: rgba(255, 122, 24, 0.18);
+    border-color: rgba(255, 122, 24, 0.55);
+    color: #ff7a18;
 }
 
 /* Undo / Redo buttons */
@@ -123,36 +484,38 @@
 
 /* Inline text entry (text tool) */
 .alpha-writer-text-entry {
-    background-color: rgba(18, 18, 26, 0.96);
-    border: 2px solid rgba(43, 255, 136, 0.6);
-    border-radius: 8px;
+    background-color: rgba(16, 16, 20, 0.96);
+    border: 2px solid rgba(255, 122, 24, 0.55);
+    border-radius: 10px;
     padding: 5px 10px;
     color: #ffffff;
     font-size: 15px;
-    caret-color: #2bff88;
+    caret-color: #ff7a18;
     min-width: 260px;
 }
 
 /* Clear / Close buttons */
 .alpha-writer-clear:hover {
     background-color: rgba(255, 71, 87, 0.25);
-    border-color: rgba(255, 71, 87, 0.6);
+    border-color: rgba(255, 71, 87, 0.60);
 }
 
 .alpha-writer-close:hover {
-    background-color: rgba(255, 71, 87, 0.4);
-    border-color: rgba(255, 71, 87, 0.8);
+    background-color: rgba(255, 71, 87, 0.40);
+    border-color: rgba(255, 71, 87, 0.80);
 }
 
-/* ---- ALPHA Quick Launcher (ui/launcher.js) ---- */
+/* ===========================================================================
+ * ALPHA Quick Launcher (ui/launcher.js)
+ * ======================================================================== */
 
 .alpha-launcher-overlay {
-    background-color: rgba(0, 0, 0, 0.18);
+    background-color: rgba(0, 0, 0, 0.22);
 }
 
 .alpha-launcher-hud {
-    background-color: #1e1e24;
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    background-color: rgba(16, 16, 20, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: 16px;
     padding: 12px;
     spacing: 12px;
@@ -161,17 +524,17 @@
 
 .alpha-launcher-entry {
     background-color: rgba(255, 255, 255, 0.06);
-    border: 2px solid rgba(43, 255, 136, 0.45);
+    border: 2px solid rgba(255, 122, 24, 0.45);
     border-radius: 10px;
     padding: 10px 14px;
     color: #ffffff;
     font-size: 16px;
-    caret-color: #2bff88;
+    caret-color: #ff7a18;
 }
 
 .alpha-launcher-entry:focus {
-    border-color: #2bff88;
-    box-shadow: 0 0 0 1px rgba(43, 255, 136, 0.5);
+    border-color: #ff7a18;
+    box-shadow: 0 0 0 1px rgba(255, 122, 24, 0.50);
 }
 
 .alpha-launcher-scroll {
@@ -187,7 +550,7 @@
 .alpha-launcher-row {
     background-color: transparent;
     border: 1px solid transparent;
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 6px 10px;
     spacing: 0;
     min-height: 44px;
@@ -197,17 +560,16 @@
 .alpha-launcher-row-box {
     spacing: 12px;
     min-height: 32px;
-    y-align: center;
 }
 
 .alpha-launcher-row:hover {
-    background-color: rgba(255, 255, 255, 0.08);
+    background-color: rgba(255, 255, 255, 0.06);
 }
 
 .alpha-launcher-row.selected {
-    background-color: rgba(43, 255, 136, 0.18);
-    border-color: rgba(43, 255, 136, 0.55);
-    color: #2bff88;
+    background-color: rgba(255, 122, 24, 0.18);
+    border-color: rgba(255, 122, 24, 0.55);
+    color: #ff7a18;
 }
 
 .alpha-launcher-row-label {

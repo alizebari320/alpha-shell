@@ -2,6 +2,8 @@
 <schemalist>
   <schema id="org.gnome.shell.extensions.alpha-shell"
           path="/org/gnome/shell/extensions/alpha-shell/">
+
+    <!-- Shortcuts -->
     <key name="toggle-writer" type="as">
       <default>["&lt;Control&gt;&lt;Alt&gt;d"]</default>
       <summary>Toggle ALPHA Writer</summary>
@@ -12,6 +14,96 @@
       <summary>Toggle ALPHA Quick Launcher</summary>
       <description>Keyboard shortcut that opens or dismisses the ALPHA Quick Launcher search HUD.</description>
     </key>
+    <key name="toggle-ask" type="as">
+      <default>["&lt;Super&gt;space"]</default>
+      <summary>Toggle ALPHA Ask</summary>
+      <description>Keyboard shortcut that opens the ALPHA Ask prompt HUD.</description>
+    </key>
+    <key name="toggle-snip" type="as">
+      <default>["&lt;Super&gt;&lt;Shift&gt;s"]</default>
+      <summary>Toggle Snip &amp; Explain</summary>
+      <description>Keyboard shortcut that starts a region snip and explains it.</description>
+    </key>
+    <key name="toggle-clipboard" type="as">
+      <default>["&lt;Super&gt;v"]</default>
+      <summary>Toggle Clipboard History</summary>
+      <description>Keyboard shortcut that opens the searchable clipboard history HUD.</description>
+    </key>
+    <key name="toggle-clipboard-ai" type="as">
+      <default>["&lt;Super&gt;&lt;Shift&gt;v"]</default>
+      <summary>Toggle Clipboard AI</summary>
+      <description>Keyboard shortcut that runs an AI action on the current clipboard text.</description>
+    </key>
+    <key name="toggle-terminal-assist" type="as">
+      <default>["&lt;Super&gt;&lt;Shift&gt;t"]</default>
+      <summary>Toggle Terminal Assist</summary>
+      <description>Keyboard shortcut that turns a description into a reviewable shell command.</description>
+    </key>
+    <key name="toggle-zoom" type="as">
+      <default>["&lt;Super&gt;&lt;Shift&gt;z"]</default>
+      <summary>Toggle Zoom &amp; Spotlight</summary>
+      <description>Keyboard shortcut that enters or leaves presentation zoom and spotlight mode.</description>
+    </key>
+    <key name="toggle-recorder" type="as">
+      <default>["&lt;Super&gt;&lt;Shift&gt;r"]</default>
+      <summary>Toggle Screen Recorder</summary>
+      <description>Keyboard shortcut that starts or stops screen recording.</description>
+    </key>
+    <key name="toggle-focus" type="as">
+      <default>["&lt;Super&gt;&lt;Shift&gt;f"]</default>
+      <summary>Toggle Focus Mode</summary>
+      <description>Keyboard shortcut that mutes notifications and dims the top bar.</description>
+    </key>
+
+    <!-- Per-feature switches. A disabled feature registers no shortcut
+         and its module is never imported. -->
+    <key name="enable-ask" type="b">
+      <default>true</default>
+      <summary>Enable ALPHA Ask</summary>
+      <description>Whether the ALPHA Ask feature is available.</description>
+    </key>
+    <key name="enable-snip" type="b">
+      <default>true</default>
+      <summary>Enable Snip &amp; Explain</summary>
+      <description>Whether the Snip &amp; Explain feature is available.</description>
+    </key>
+    <key name="enable-clipboard" type="b">
+      <default>true</default>
+      <summary>Enable Clipboard History</summary>
+      <description>Whether clipboard history is recorded and browsable.</description>
+    </key>
+    <key name="enable-clipboard-ai" type="b">
+      <default>true</default>
+      <summary>Enable Clipboard AI</summary>
+      <description>Whether the Clipboard AI feature is available.</description>
+    </key>
+    <key name="enable-terminal-assist" type="b">
+      <default>true</default>
+      <summary>Enable Terminal Assist</summary>
+      <description>Whether the Terminal Assist feature is available.</description>
+    </key>
+    <key name="enable-zoom" type="b">
+      <default>true</default>
+      <summary>Enable Zoom &amp; Spotlight</summary>
+      <description>Whether the Zoom &amp; Spotlight feature is available.</description>
+    </key>
+    <key name="enable-recorder" type="b">
+      <default>true</default>
+      <summary>Enable Screen Recorder</summary>
+      <description>Whether the screen recorder feature is available.</description>
+    </key>
+    <key name="enable-stats" type="b">
+      <default>false</default>
+      <summary>Enable Panel Stats</summary>
+      <description>Whether the system stats indicator is shown in the top bar.</description>
+    </key>
+    <key name="enable-focus" type="b">
+      <default>true</default>
+      <summary>Enable Focus Mode</summary>
+      <description>Whether the Focus Mode feature is available.</description>
+    </key>
+
+    <!-- AI configuration -->
     <key name="provider" type="s">
       <default>''</default>
       <summary>Active AI provider id</summary>
