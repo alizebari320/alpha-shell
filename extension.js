@@ -278,9 +278,20 @@ export default class AlphaShellExtension extends Extension {
         if (this._store)
             return this._store;
 
+        if (!this._settings)
+            return null; // disabled before we even started
+
         const {ClipboardStore} = await import('./ui/clipboard.js');
-        this._store = new ClipboardStore();
-        this._store.enable();
+
+        // enable() may have been undone while importing: never leave a
+        // listening store behind a disabled extension.
+        if (!this._settings)
+            return null;
+
+        if (!this._store) {
+            this._store = new ClipboardStore();
+            this._store.enable();
+        }
         return this._store;
     }
 

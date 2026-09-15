@@ -281,6 +281,8 @@ export class ClipboardHistoryHud extends AlphaOverlay {
     }
 
     _refresh(query) {
+        if (!this._store)
+            return;
         this._results = this._store.search(query);
         this._selected = 0;
         this._render();

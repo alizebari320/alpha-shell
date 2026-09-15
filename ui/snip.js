@@ -49,6 +49,8 @@ class SnipSelector {
         this._onSelected = onSelected;
         this._signals = [];
         this._modal = null;
+        this._finishId = 0;
+        this._destroyed = false;
         this._startX = 0;
         this._startY = 0;
         this._dragging = false;
@@ -74,9 +76,18 @@ class SnipSelector {
 
         Main.layoutManager.uiGroup.add_child(this._overlay);
 
-        this._modal = Main.pushModal(this._overlay, {
-            actionMode: Shell.ActionMode.NORMAL,
-        });
+        // The grab can fail (or throw) when another actor still holds it.
+        // A selector without the grab is a dead fullscreen reactive overlay
+        // that swallows every click with no way to dismiss it — i.e. a
+        // frozen screen — so bail out and tear down immediately instead.
+        try {
+            this._modal = Main.pushModal(this._overlay, {
+                actionMode: Shell.ActionMode.NORMAL,
+            });
+        } catch (e) {
+            console.warn(`[alpha-shell] snip selector could not grab input: ${e.message}`);
+            this._modal = null;
+        }
         if (!this._modal) {
             this.destroy();
             return;
@@ -135,12 +146,20 @@ class SnipSelector {
         });
     }
 
+    get dead() {
+        return this._destroyed;
+    }
+
     _connect(object, name, callback) {
         this._signals.push([object, object.connect(name, callback)]);
     }
 
+    /** Tear the selector down on the next tick, then hand the region over.
+     *  The idle is tracked and cancelled by destroy(), so a disable() in
+     *  between can never resurrect a HUD after the extension is gone. */
     _finish(after) {
-        GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+        this._finishId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+            this._finishId = 0;
             this.destroy();
             after();
             return GLib.SOURCE_REMOVE;
@@ -148,6 +167,17 @@ class SnipSelector {
     }
 
     destroy() {
+        this._destroyed = true;
+
+        if (this._finishId) {
+            try {
+                GLib.source_remove(this._finishId);
+            } catch (e) {
+                // Already fired — fine.
+            }
+            this._finishId = 0;
+        }
+
         for (const [object, id] of this._signals) {
             try {
                 object.disconnect(id);
@@ -328,7 +358,9 @@ export class SnipExplain {
     }
 
     get isOpen() {
-        return !!this._selector || !!this._hud?.isOpen;
+        if (this._selector && !this._selector.dead)
+            return true;
+        return !!this._hud?.isOpen;
     }
 
     toggle() {
@@ -342,11 +374,13 @@ export class SnipExplain {
         if (this.isOpen)
             return;
 
-        this._selector = new SnipSelector(area => {
+        const selector = new SnipSelector(area => {
             this._selector = null;
             this._hud = new SnipHud(this._path, this._ai, area);
             this._hud.open();
         });
+        // The selector destroys itself when it cannot grab input.
+        this._selector = selector.dead ? null : selector;
     }
 
     destroy() {

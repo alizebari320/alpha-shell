@@ -42,6 +42,7 @@ export class ClipboardAiHud extends AlphaOverlay {
 
         this._ai = ai;
         this._token = 0;
+        this._readToken = 0;
         this._source = '';
         this._result = '';
         this._busy = false;
@@ -90,9 +91,12 @@ export class ClipboardAiHud extends AlphaOverlay {
     }
 
     _onOpened() {
-        const token = this._token;
+        // Dedicated read token: running an action must not invalidate the
+        // initial clipboard read, or the preview stays "Reading clipboard…"
+        // forever. Only closing/reopening the HUD does.
+        const token = ++this._readToken;
         St.Clipboard.get_default().get_text(St.ClipboardType.CLIPBOARD, (_cb, text) => {
-            if (token !== this._token || !this._sourceLabel)
+            if (token !== this._readToken || !this._sourceLabel)
                 return;
 
             this._source = (text ?? '').slice(0, MAX_INPUT_CHARS);
@@ -104,6 +108,7 @@ export class ClipboardAiHud extends AlphaOverlay {
 
     _onClosing() {
         this._token++;
+        this._readToken++;
         this._source = '';
         this._result = '';
         this._busy = false;

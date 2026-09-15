@@ -59,10 +59,12 @@ export class AlphaOverlay {
         this._panel = null;
         this._modal = null;
         this._closing = false;
+        this._destroyed = false;
 
         // Ledgers: everything registered here is released in _teardown().
         this._signals = [];
         this._timeouts = new Set();
+        this._idles = new Set();
     }
 
     get isOpen() {
@@ -83,9 +85,20 @@ export class AlphaOverlay {
     // --- lifecycle --------------------------------------------------------
 
     open() {
-        if (this._overlay || this._closing)
+        if (this._overlay || this._closing || this._destroyed)
             return;
 
+        try {
+            this._openUnsafe();
+        } catch (e) {
+            // A half-built HUD must never leave a modal grab or a stray
+            // actor on the stage: fully tear down and surface the error.
+            console.error(`[alpha-shell] failed to open HUD: ${e.message}\n${e.stack}`);
+            this._teardown();
+        }
+    }
+
+    _openUnsafe() {
         this._overlay = new St.Widget({
             style_class: this._dim ? 'alpha-overlay' : '',
             reactive: true,
@@ -116,9 +129,14 @@ export class AlphaOverlay {
         this._layout();
 
         // Modal grab: without it the HUD cannot own the keyboard.
-        this._modal = Main.pushModal(this._overlay, {
-            actionMode: Shell.ActionMode.NORMAL,
-        });
+        try {
+            this._modal = Main.pushModal(this._overlay, {
+                actionMode: Shell.ActionMode.NORMAL,
+            });
+        } catch (e) {
+            console.warn(`[alpha-shell] pushModal failed: ${e.message}`);
+            this._modal = null;
+        }
         if (!this._modal) {
             console.warn('[alpha-shell] could not grab input; closing HUD');
             this._teardown();
@@ -166,50 +184,83 @@ export class AlphaOverlay {
      * while they are still emitting is what crashed gnome-shell in ac5a0ac.
      */
     deferClose() {
-        if (!this._overlay || this._closing)
+        if (!this._overlay || this._closing || this._destroyed)
             return;
         this._closing = true;
-        GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+        const id = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+            this._idles.delete(id);
             this._closing = false;
-            this.close();
+            try {
+                this.close();
+            } catch (e) {
+                // Never let a deferClose failure leave the modal grab up.
+                console.warn(`[alpha-shell] deferClose failed: ${e.message}`);
+                this._popModal();
+            }
             return GLib.SOURCE_REMOVE;
         });
+        this._idles.add(id);
     }
 
     close() {
-        if (!this._overlay)
+        if (!this._overlay || this._destroyed)
             return;
 
-        this._onClosing();
-
-        // Drop the grab before animating so input returns to apps at once.
+        // Release the modal grab FIRST and unconditionally. If anything
+        // below throws, the grab is already gone, so input can never be
+        // left frozen on screen.
         this._popModal();
+
+        // Run the subclass hook inside a guard so a throwing hook cannot
+        // abort the teardown that follows it.
+        try {
+            this._onClosing();
+        } catch (e) {
+            console.warn(`[alpha-shell] _onClosing hook failed: ${e.message}`);
+        }
+
+        this._releaseSignals();
+        this._releaseTimeouts();
 
         const overlay = this._overlay;
         const panel = this._panel;
         this._overlay = null;
         this._panel = null;
 
-        this._releaseSignals();
-        this._releaseTimeouts();
+        if (!panel || !overlay)
+            return;
 
-        panel.ease({
-            opacity: 0,
-            scale_x: OPEN_SCALE,
-            scale_y: OPEN_SCALE,
-            duration: CLOSE_MS,
-            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-            // Runs on a later frame, so this is outside any emission.
-            onComplete: () => overlay.destroy(),
-        });
+        // Animate out, then destroy. If the animation can't start (panel
+        // already destroyed by a competing teardown), destroy immediately
+        // so nothing leaks and no dead actor is left on the stage.
+        try {
+            panel.ease({
+                opacity: 0,
+                scale_x: OPEN_SCALE,
+                scale_y: OPEN_SCALE,
+                duration: CLOSE_MS,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                // Runs on a later frame, so this is outside any emission.
+                onComplete: () => overlay.destroy(),
+            });
+        } catch (e) {
+            overlay.destroy();
+        }
     }
 
     /** Hard teardown with no animation. Used by destroy() and open() errors. */
     _teardown() {
-        this._onClosing();
         this._popModal();
+
+        try {
+            this._onClosing();
+        } catch (e) {
+            console.warn(`[alpha-shell] _onClosing hook failed: ${e.message}`);
+        }
+
         this._releaseSignals();
         this._releaseTimeouts();
+        this._releaseIdles();
 
         if (this._overlay) {
             this._overlay.destroy();
@@ -220,6 +271,7 @@ export class AlphaOverlay {
 
     /** Called from the extension's disable(). Must leave nothing behind. */
     destroy() {
+        this._destroyed = true;
         this._closing = false;
         this._teardown();
     }
@@ -285,7 +337,12 @@ export class AlphaOverlay {
             return Clutter.EVENT_STOP;
         }
 
-        return this._onKeyPress(symbol, event);
+        try {
+            return this._onKeyPress(symbol, event);
+        } catch (e) {
+            console.warn(`[alpha-shell] key handler failed: ${e.message}`);
+            return Clutter.EVENT_STOP;
+        }
     }
 
     _popModal() {
@@ -319,6 +376,19 @@ export class AlphaOverlay {
             }
         }
         this._timeouts.clear();
+    }
+
+    /** Cancel any pending deferClose() idle callbacks so they cannot touch
+     *  a destroyed overlay later (the source of stuck grabs / leaks). */
+    _releaseIdles() {
+        for (const id of this._idles) {
+            try {
+                GLib.source_remove(id);
+            } catch (e) {
+                // Already fired — fine.
+            }
+        }
+        this._idles.clear();
     }
 
     // --- subclass hooks ---------------------------------------------------

@@ -208,21 +208,28 @@ export const PanelStats = GObject.registerClass({
     }
 
     _refreshDisk() {
-        try {
-            const info = Gio.File.new_for_path('/').query_filesystem_info(
-                'filesystem::size,filesystem::free', null);
-            const size = info.get_attribute_uint64('filesystem::size');
-            const free = info.get_attribute_uint64('filesystem::free');
-            if (size > 0) {
-                const usedGb = (size - free) / (1024 ** 3);
-                const totalGb = size / (1024 ** 3);
-                const percent = Math.round(((size - free) / size) * 100);
-                this._set('disk',
-                    `${usedGb.toFixed(1)} / ${totalGb.toFixed(1)} GB \u00b7 ${percent}%`);
-            }
-        } catch (e) {
-            this._set('disk', 'unavailable');
-        }
+        // Async like every other read: a statfs on a slow mount must never
+        // block the compositor main loop.
+        Gio.File.new_for_path('/').query_filesystem_info_async(
+            'filesystem::size,filesystem::free',
+            GLib.PRIORITY_DEFAULT, null, (file, result) => {
+                try {
+                    const info = file.query_filesystem_info_finish(result);
+                    const size = info.get_attribute_uint64('filesystem::size');
+                    const free = info.get_attribute_uint64('filesystem::free');
+                    if (size > 0) {
+                        const usedGb = (size - free) / (1024 ** 3);
+                        const totalGb = size / (1024 ** 3);
+                        const percent = Math.round(((size - free) / size) * 100);
+                        this._set('disk',
+                            `${usedGb.toFixed(1)} / ${totalGb.toFixed(1)} GB \u00b7 ${percent}%`);
+                    }
+                } catch (e) {
+                    // _set() is a no-op once the rows are gone (menu closed,
+                    // indicator destroyed) — never touch freed actors.
+                    this._set('disk', 'unavailable');
+                }
+            });
     }
 
     destroy() {

@@ -136,6 +136,11 @@ export class Writer {
 
         // Every connection made through _track(), disconnected in _teardown()
         this._handlers = [];
+
+        // Tracked idle sources, cancelled in _teardown so a deferred close
+        // can never fire after the actors are gone (which would touch freed
+        // memory and freeze the shell).
+        this._idles = new Set();
     }
 
     // ------------------------------------------------------------------
@@ -1090,9 +1095,11 @@ export class Writer {
      *  St/Clutter touching freed memory afterwards (pseudo-class updates,
      *  accessibility objects) and SIGSEGVs gnome-shell. Scheduling the work
      *  on the next idle cycle achieves the same without running inside the
-     *  emission. (GNOME 50 removed Meta.later_add / Meta.Later entirely.) */
+     *  emission. (GNOME 50 removed Meta.later_add / Meta.Later entirely.)
+     *  The idle is tracked so teardown can cancel it before it runs. */
     _defer(fn) {
-        GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+        const idleId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            this._idles.delete(idleId);
             try {
                 fn();
             } catch (e) {
@@ -1100,6 +1107,7 @@ export class Writer {
             }
             return GLib.SOURCE_REMOVE; // run once
         });
+        this._idles.add(idleId);
     }
 
     _beginGrab(actor) {
@@ -1153,6 +1161,17 @@ export class Writer {
     }
 
     _teardown() {
+        // Cancel pending deferred operations first, so no deferred close/
+        // destroy can fire against freed actors after this teardown.
+        for (const id of this._idles) {
+            try {
+                GLib.source_remove(id);
+            } catch (e) {
+                // Already fired — fine.
+            }
+        }
+        this._idles.clear();
+
         // Release input grabs first so no stray events arrive mid-teardown.
         this._endGrab(this._drawGrab);
         this._drawGrab = null;

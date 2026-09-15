@@ -67,8 +67,16 @@ export class Launcher {
         // disconnected in _teardown().
         this._handlers = [];
 
+        // Tracked idle sources, cancelled in _teardown so a stale callback
+        // can never push a modal grab onto a destroyed overlay (a stuck grab
+        // freezes all input).
+        this._idles = new Set();
+
         // Monitor tracking
         this._monitorInvalidated = false;
+
+        // Pending coalesced search refresh (see _queueRefresh)
+        this._refreshIdleId = 0;
     }
 
     get active() {
@@ -100,8 +108,9 @@ export class Launcher {
             // the menu is still releasing ITS grab this very frame. Pushing
             // ours immediately makes the two grabs fight and freezes all
             // input. (GNOME 50 removed Meta.later_add; idle_add replaces it.)
-            GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-                if (!this._active)
+            const idleId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+                this._idles.delete(idleId);
+                if (!this._active || this._destroyed)
                     return GLib.SOURCE_REMOVE;  // closed again before we grabbed
                 try {
                     this._grab = Main.pushModal(this._overlay);
@@ -113,6 +122,7 @@ export class Launcher {
                 }
                 return GLib.SOURCE_REMOVE; // run once
             });
+            this._idles.add(idleId);
         } catch (e) {
             // A half-built HUD must never leak a modal grab onto the stage.
             console.error(`[alpha-shell] launcher failed to enable: ${e.message}\n${e.stack}`);
@@ -134,8 +144,8 @@ export class Launcher {
     }
 
     destroy() {
-        this.disable();
         this._destroyed = true;
+        this.disable();
     }
 
     toggle() {
@@ -192,7 +202,7 @@ export class Launcher {
 
         const entryHandlers = [
             {obj: this._entryText, id: this._entryText.connect('text-changed',
-                () => this._refresh(this._entryText.get_text()))},
+                () => this._queueRefresh())},
             {obj: this._entryText, id: this._entryText.connect('key-press-event',
                 (a, e) => this._onKeyPress(e))},
         ];
@@ -301,6 +311,27 @@ export class Launcher {
     // ------------------------------------------------------------------
     // Search & refresh
     // ------------------------------------------------------------------
+
+    /** Coalesce search refreshes into the next idle tick. text-changed
+     *  fires INSIDE the entry's key-press emission; rebuilding the result
+     *  rows there destroys St.Buttons mid-emission — the exact hazard that
+     *  SIGSEGV'd gnome-shell in st_widget_update_child_styles (see the
+     *  writer's _defer note). One idle later there is no emission to be
+     *  inside, and a burst of keystrokes costs a single rebuild. */
+    _queueRefresh() {
+        if (this._refreshIdleId)
+            return;
+
+        const idleId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            this._idles.delete(idleId);
+            this._refreshIdleId = 0;
+            if (this._active && this._entryText)
+                this._refresh(this._entryText.get_text());
+            return GLib.SOURCE_REMOVE;
+        });
+        this._refreshIdleId = idleId;
+        this._idles.add(idleId);
+    }
 
     _refresh(query) {
         const q = (query || '').trim().toLowerCase();
@@ -465,11 +496,13 @@ export class Launcher {
         if (this._hud) {
             this._hud.queue_relayout();
             // Re-center on the next idle cycle to avoid acting mid-relayout.
-            GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            const idleId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+                this._idles.delete(idleId);
                 if (this._active && this._monitorInvalidated)
                     this._centerHud();
                 return GLib.SOURCE_REMOVE;
             });
+            this._idles.add(idleId);
         }
     }
 
@@ -483,9 +516,11 @@ export class Launcher {
     }
 
     /** Run fn outside any ongoing signal emission — see _launch().
-     *  (GNOME 50 removed Meta.later_add; idle_add replaces it.) */
+     *  (GNOME 50 removed Meta.later_add; idle_add replaces it.) The idle is
+     *  tracked so teardown can cancel it before it touches freed actors. */
     _defer(fn) {
-        GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+        const idleId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            this._idles.delete(idleId);
             try {
                 fn();
             } catch (e) {
@@ -493,9 +528,22 @@ export class Launcher {
             }
             return GLib.SOURCE_REMOVE; // run once
         });
+        this._idles.add(idleId);
     }
 
     _teardown() {
+        // Cancel every pending idle FIRST so a stale callback cannot
+        // re-push a modal grab or touch freed actors after this teardown.
+        for (const id of this._idles) {
+            try {
+                GLib.source_remove(id);
+            } catch (e) {
+                // Already fired — fine.
+            }
+        }
+        this._idles.clear();
+        this._refreshIdleId = 0;
+
         // Release the modal grab FIRST — never leave the stage frozen.
         // popModal() takes the Clutter.Grab handle returned by pushModal(),
         // not the actor.

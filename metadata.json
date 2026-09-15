@@ -2,7 +2,7 @@
   "uuid": "alpha-shell@donk",
   "name": "ALPHA Shell",
   "description": "ALPHA Writer — a screen annotation and handwriting tool for GNOME Shell",
-  "version": "2",
+  "version": "1.2.4",
   "shell-version": ["50"],
   "settings-schema": "org.gnome.shell.extensions.alpha-shell",
   "url": "https://github.com/alizebari320/alpha-shell",
